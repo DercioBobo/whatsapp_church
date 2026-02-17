@@ -1,0 +1,222 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "autoname": "ENVIO-CAT-.#####",
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "section_status",
+        "status",
+        "column_break_status",
+        "data_criacao",
+        "section_mensagem",
+        "mensagem",
+        "section_adicionar",
+        "tipo_destinatario",
+        "catecumeno",
+        "catequista",
+        "turma",
+        "preparacao_sacramento",
+        "numeros_manuais",
+        "column_break_adicionar",
+        "adicionar_destinatarios",
+        "section_destinatarios",
+        "destinatarios",
+        "section_envio",
+        "enviar",
+        "column_break_envio",
+        "total_destinatarios",
+        "total_enviados",
+        "total_falhados",
+        "section_resultado",
+        "resultado_html"
+    ],
+    "fields": [
+        {
+            "fieldname": "section_status",
+            "fieldtype": "Section Break",
+            "label": "Status"
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Status",
+            "options": "Rascunho\nEnviando\nEnviado\nEnviado Parcialmente\nFalhou",
+            "default": "Rascunho",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_status",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "data_criacao",
+            "fieldtype": "Datetime",
+            "label": "Data de Cria\u00e7\u00e3o",
+            "default": "Now",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_mensagem",
+            "fieldtype": "Section Break",
+            "label": "Mensagem"
+        },
+        {
+            "fieldname": "mensagem",
+            "fieldtype": "Text",
+            "label": "Mensagem",
+            "reqd": 1,
+            "description": "Texto da mensagem WhatsApp. Pode usar formata\u00e7\u00e3o: *negrito* _it\u00e1lico_ ~riscado~"
+        },
+        {
+            "fieldname": "section_adicionar",
+            "fieldtype": "Section Break",
+            "label": "Adicionar Destinat\u00e1rios",
+            "depends_on": "eval:doc.status=='Rascunho'"
+        },
+        {
+            "fieldname": "tipo_destinatario",
+            "fieldtype": "Select",
+            "label": "Tipo de Destinat\u00e1rio",
+            "options": "\nManual\nCatecumeno\nCatequista\nTurma\nPreparacao do Sacramento",
+            "description": "Seleccione a origem dos destinat\u00e1rios"
+        },
+        {
+            "fieldname": "catecumeno",
+            "fieldtype": "Link",
+            "label": "Catecumeno",
+            "options": "Catecumeno",
+            "depends_on": "eval:doc.tipo_destinatario=='Catecumeno'"
+        },
+        {
+            "fieldname": "catequista",
+            "fieldtype": "Link",
+            "label": "Catequista",
+            "options": "Catequista",
+            "depends_on": "eval:doc.tipo_destinatario=='Catequista'"
+        },
+        {
+            "fieldname": "turma",
+            "fieldtype": "Link",
+            "label": "Turma",
+            "options": "Turma",
+            "depends_on": "eval:doc.tipo_destinatario=='Turma'"
+        },
+        {
+            "fieldname": "preparacao_sacramento",
+            "fieldtype": "Link",
+            "label": "Prepara\u00e7\u00e3o do Sacramento",
+            "options": "Preparacao do Sacramento",
+            "depends_on": "eval:doc.tipo_destinatario=='Preparacao do Sacramento'"
+        },
+        {
+            "fieldname": "numeros_manuais",
+            "fieldtype": "Small Text",
+            "label": "N\u00fameros Manuais",
+            "depends_on": "eval:doc.tipo_destinatario=='Manual'",
+            "description": "Um n\u00famero por linha ou separados por v\u00edrgula"
+        },
+        {
+            "fieldname": "column_break_adicionar",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "adicionar_destinatarios",
+            "fieldtype": "Button",
+            "label": "Adicionar Destinat\u00e1rios"
+        },
+        {
+            "fieldname": "section_destinatarios",
+            "fieldtype": "Section Break",
+            "label": "Lista de Destinat\u00e1rios"
+        },
+        {
+            "fieldname": "destinatarios",
+            "fieldtype": "Table",
+            "label": "Destinat\u00e1rios",
+            "options": "Destinatario WhatsApp Catequese"
+        },
+        {
+            "fieldname": "section_envio",
+            "fieldtype": "Section Break",
+            "label": "Envio"
+        },
+        {
+            "fieldname": "enviar",
+            "fieldtype": "Button",
+            "label": "Enviar Mensagens",
+            "depends_on": "eval:doc.status=='Rascunho'"
+        },
+        {
+            "fieldname": "column_break_envio",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "total_destinatarios",
+            "fieldtype": "Int",
+            "label": "Total Destinat\u00e1rios",
+            "read_only": 1,
+            "default": "0"
+        },
+        {
+            "fieldname": "total_enviados",
+            "fieldtype": "Int",
+            "label": "Total Enviados",
+            "read_only": 1,
+            "default": "0"
+        },
+        {
+            "fieldname": "total_falhados",
+            "fieldtype": "Int",
+            "label": "Total Falhados",
+            "read_only": 1,
+            "default": "0"
+        },
+        {
+            "fieldname": "section_resultado",
+            "fieldtype": "Section Break",
+            "label": "Resultado",
+            "depends_on": "eval:doc.status!='Rascunho'"
+        },
+        {
+            "fieldname": "resultado_html",
+            "fieldtype": "HTML",
+            "label": "Resultado"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [
+        {
+            "link_doctype": "WhatsApp Message Log",
+            "link_fieldname": "reference_name"
+        }
+    ],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Envio WhatsApp Catequese",
+    "naming_rule": "Expression (old style)",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 0,
+    "search_fields": "status",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "title_field": "status",
+    "track_changes": 1
+}

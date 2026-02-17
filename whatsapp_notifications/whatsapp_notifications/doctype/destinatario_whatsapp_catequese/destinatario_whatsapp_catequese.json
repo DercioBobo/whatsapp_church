@@ -1,0 +1,83 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "nome",
+        "contacto",
+        "column_break_origem",
+        "origem",
+        "referencia",
+        "column_break_status",
+        "status_envio",
+        "erro"
+    ],
+    "fields": [
+        {
+            "fieldname": "nome",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Nome",
+            "read_only": 1
+        },
+        {
+            "fieldname": "contacto",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Contacto",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_origem",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "origem",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Origem",
+            "read_only": 1
+        },
+        {
+            "fieldname": "referencia",
+            "fieldtype": "Data",
+            "label": "Refer\u00eancia",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_status",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "status_envio",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Status Envio",
+            "options": "Pendente\nEnviado\nFalhou",
+            "default": "Pendente",
+            "read_only": 1
+        },
+        {
+            "fieldname": "erro",
+            "fieldtype": "Small Text",
+            "label": "Erro",
+            "hidden": 1,
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Destinatario WhatsApp Catequese",
+    "owner": "Administrator",
+    "permissions": [],
+    "quick_entry": 0,
+    "sort_field": "creation",
+    "sort_order": "ASC",
+    "track_changes": 0
+}
