@@ -1,0 +1,298 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "enabled",
+        "section_connection",
+        "api_url",
+        "api_key",
+        "instance_name",
+        "column_break_connection",
+        "connection_status",
+        "last_checked",
+        "section_webhook",
+        "webhook_url",
+        "webhook_buttons",
+        "configure_webhook",
+        "webhook_status",
+        "section_defaults",
+        "default_country_code",
+        "local_number_length",
+        "local_number_prefixes",
+        "column_break_defaults",
+        "owner_number",
+        "section_advanced",
+        "timeout_seconds",
+        "max_retries",
+        "retry_delay_minutes",
+        "column_break_advanced",
+        "log_retention_days",
+        "enable_debug_logging",
+        "section_rate_limiting",
+        "enable_rate_limiting",
+        "messages_per_minute",
+        "column_break_rate",
+        "queue_enabled",
+        "section_media",
+        "media_doctypes",
+        "section_maintenance",
+        "clear_logs_html",
+        "clear_message_logs",
+        "clear_approval_requests"
+    ],
+    "fields": [
+        {
+            "default": "0",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "in_list_view": 1,
+            "label": "Enabled",
+            "description": "Master switch to enable/disable WhatsApp notifications"
+        },
+        {
+            "fieldname": "section_connection",
+            "fieldtype": "Section Break",
+            "label": "Evolution API Connection"
+        },
+        {
+            "fieldname": "api_url",
+            "fieldtype": "Data",
+            "label": "API URL",
+            "reqd": 0,
+            "description": "Evolution API base URL (e.g., http://your-server:8080/evolution)",
+            "placeholder": "http://localhost:8080/evolution"
+        },
+        {
+            "fieldname": "api_key",
+            "fieldtype": "Password",
+            "label": "API Key",
+            "description": "Evolution API authentication key"
+        },
+        {
+            "fieldname": "instance_name",
+            "fieldtype": "Data",
+            "label": "Instance Name",
+            "description": "WhatsApp instance name in Evolution API"
+        },
+        {
+            "fieldname": "column_break_connection",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "connection_status",
+            "fieldtype": "Data",
+            "label": "Connection Status",
+            "read_only": 1,
+            "description": "Last connection test result"
+        },
+        {
+            "fieldname": "last_checked",
+            "fieldtype": "Datetime",
+            "label": "Last Checked",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_webhook",
+            "fieldtype": "Section Break",
+            "label": "Webhook Configuration (for Approvals)"
+        },
+        {
+            "fieldname": "webhook_url",
+            "fieldtype": "Data",
+            "label": "Webhook URL",
+            "read_only": 1,
+            "description": "This URL receives incoming messages from Evolution API for approval responses"
+        },
+        {
+            "fieldname": "webhook_buttons",
+            "fieldtype": "HTML",
+            "options": "<div class='webhook-buttons'></div>"
+        },
+        {
+            "fieldname": "configure_webhook",
+            "fieldtype": "Button",
+            "label": "Configure Webhook in Evolution API"
+        },
+        {
+            "fieldname": "webhook_status",
+            "fieldtype": "Data",
+            "label": "Webhook Status",
+            "read_only": 1,
+            "description": "Status of webhook configuration in Evolution API"
+        },
+        {
+            "fieldname": "section_defaults",
+            "fieldtype": "Section Break",
+            "label": "Phone Number Settings"
+        },
+        {
+            "default": "258",
+            "fieldname": "default_country_code",
+            "fieldtype": "Data",
+            "label": "Default Country Code",
+            "description": "Country code to prepend to local numbers (e.g., 258 for Mozambique)"
+        },
+        {
+            "default": "9",
+            "fieldname": "local_number_length",
+            "fieldtype": "Int",
+            "label": "Local Number Length",
+            "description": "Expected length of local phone numbers (without country code)"
+        },
+        {
+            "default": "82,83,84,85,86,87",
+            "fieldname": "local_number_prefixes",
+            "fieldtype": "Data",
+            "label": "Local Number Prefixes",
+            "description": "Comma-separated list of valid local number prefixes (e.g., 82,83,84)"
+        },
+        {
+            "fieldname": "column_break_defaults",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "owner_number",
+            "fieldtype": "Small Text",
+            "label": "Default Notification Numbers",
+            "description": "WhatsApp numbers to receive admin/owner notifications (one per line)"
+        },
+        {
+            "fieldname": "section_advanced",
+            "fieldtype": "Section Break",
+            "label": "Advanced Settings",
+            "collapsible": 1
+        },
+        {
+            "default": "30",
+            "fieldname": "timeout_seconds",
+            "fieldtype": "Int",
+            "label": "Timeout (seconds)",
+            "description": "API request timeout in seconds"
+        },
+        {
+            "default": "3",
+            "fieldname": "max_retries",
+            "fieldtype": "Int",
+            "label": "Max Retries",
+            "description": "Maximum retry attempts for failed messages"
+        },
+        {
+            "default": "5",
+            "fieldname": "retry_delay_minutes",
+            "fieldtype": "Int",
+            "label": "Retry Delay (minutes)",
+            "description": "Minutes to wait before retrying failed messages"
+        },
+        {
+            "fieldname": "column_break_advanced",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "30",
+            "fieldname": "log_retention_days",
+            "fieldtype": "Int",
+            "label": "Log Retention (days)",
+            "description": "Days to keep message logs (0 = forever)"
+        },
+        {
+            "default": "0",
+            "fieldname": "enable_debug_logging",
+            "fieldtype": "Check",
+            "label": "Enable Debug Logging",
+            "description": "Log detailed debug information (for troubleshooting)"
+        },
+        {
+            "fieldname": "section_rate_limiting",
+            "fieldtype": "Section Break",
+            "label": "Rate Limiting",
+            "collapsible": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "enable_rate_limiting",
+            "fieldtype": "Check",
+            "label": "Enable Rate Limiting",
+            "description": "Limit message sending rate to avoid WhatsApp blocks"
+        },
+        {
+            "default": "20",
+            "fieldname": "messages_per_minute",
+            "fieldtype": "Int",
+            "label": "Messages Per Minute",
+            "description": "Maximum messages to send per minute",
+            "depends_on": "enable_rate_limiting"
+        },
+        {
+            "fieldname": "column_break_rate",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "1",
+            "fieldname": "queue_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Message Queue",
+            "description": "Queue messages for background processing (recommended for high volume)"
+        },
+        {
+            "fieldname": "section_media",
+            "fieldtype": "Section Break",
+            "label": "WhatsApp Media Button",
+            "description": "Configure which DocTypes show the 'Send via WhatsApp' button"
+        },
+        {
+            "fieldname": "media_doctypes",
+            "fieldtype": "Table",
+            "label": "Enabled DocTypes",
+            "options": "WhatsApp Media DocType",
+            "description": "Add DocTypes that should have the WhatsApp media button"
+        },
+        {
+            "fieldname": "section_maintenance",
+            "fieldtype": "Section Break",
+            "label": "Maintenance",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "clear_logs_html",
+            "fieldtype": "HTML",
+            "options": "<p class='text-muted'>Use the buttons below to manage message logs and approval requests.</p>"
+        },
+        {
+            "fieldname": "clear_message_logs",
+            "fieldtype": "Button",
+            "label": "Clear All Message Logs"
+        },
+        {
+            "fieldname": "clear_approval_requests",
+            "fieldtype": "Button",
+            "label": "Clear All Approval Requests"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "issingle": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Evolution API Settings",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 0,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}
