@@ -555,7 +555,7 @@ function add_from_selection(frm, tipo, names) {
         });
     }
 
-    frappe.freeze('Adicionando destinat\u00e1rios...');
+    frappe.dom.freeze('Adicionando destinat\u00e1rios...');
 
     // Process sequentially to avoid race conditions
     let chain = Promise.resolve();
@@ -564,14 +564,14 @@ function add_from_selection(frm, tipo, names) {
     });
 
     chain.then(function () {
-        frappe.unfreeze();
+        frappe.dom.unfreeze();
         frappe.show_alert({
             message: __('{0} destinat\u00e1rio(s) adicionado(s) de {1} {2}(s)',
                 [total_added, names.length, tipo]),
             indicator: 'green'
         }, 5);
     }).catch(function () {
-        frappe.unfreeze();
+        frappe.dom.unfreeze();
         frm.reload_doc();
     });
 }

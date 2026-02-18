@@ -73,7 +73,6 @@
             "fieldname": "mensagem",
             "fieldtype": "Text",
             "label": "Mensagem",
-            "reqd": 1,
             "hidden": 1
         },
         {
