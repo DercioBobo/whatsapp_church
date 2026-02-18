@@ -327,14 +327,14 @@ function show_multiselect_dialog(frm, doctype_type) {
         ? 'Seleccionar ' + doctype_type
         : 'Seleccionar ' + doctype_type + 's';
 
-    // Fetch records
+    // Fetch records - only request 'name' which is always permitted
     frappe.call({
         method: 'frappe.client.get_list',
         args: {
             doctype: dt,
-            fields: ['name', 'nome_completo', 'nome'],
+            fields: ['name'],
             limit_page_length: 0,
-            order_by: 'nome_completo asc, nome asc, name asc'
+            order_by: 'name asc'
         },
         freeze: true,
         freeze_message: 'Carregando...',
@@ -347,7 +347,7 @@ function show_multiselect_dialog(frm, doctype_type) {
             let records = r.message.map(function (rec) {
                 return {
                     name: rec.name,
-                    display: rec.nome_completo || rec.nome || rec.name
+                    display: rec.name
                 };
             });
 
