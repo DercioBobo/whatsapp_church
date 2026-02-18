@@ -522,94 +522,52 @@ function show_manual_dialog(frm) {
         primary_action_label: 'Adicionar',
         primary_action: function (values) {
             dialog.hide();
-            frm.set_value('tipo_destinatario', 'Manual');
-            frm.set_value('numeros_manuais', values.numeros);
-
-            let do_add = function () {
-                frappe.call({
-                    method: 'adicionar_destinatarios',
-                    doc: frm.doc,
-                    freeze: true,
-                    freeze_message: 'Adicionando...',
-                    callback: function (r) {
-                        if (r.message) {
-                            frm.reload_doc();
-                            frappe.show_alert({
-                                message: __('{0} n\u00famero(s) adicionado(s). Total: {1}',
-                                    [r.message.added, r.message.total]),
-                                indicator: 'green'
-                            }, 5);
-                        }
-                    }
-                });
-            };
-            frm.save().then(do_add);
+            call_adicionar(frm, 'Manual', [values.numeros]);
         }
     });
     dialog.show();
 }
 
 // ============================================================
-// Add from multi-select: set fields, call server
+// Single server call to add all selected records at once
 // ============================================================
+function call_adicionar(frm, tipo, names) {
+    let do_call = function () {
+        frappe.call({
+            method: 'adicionar_multiplos',
+            doc: frm.doc,
+            args: {
+                tipo: tipo,
+                nomes: JSON.stringify(names)
+            },
+            freeze: true,
+            freeze_message: 'Adicionando destinat\u00e1rios...',
+            callback: function (r) {
+                if (r.message) {
+                    frm.reload_doc();
+                    let msg = __('{0} destinat\u00e1rio(s) adicionado(s)', [r.message.added]);
+                    if (r.message.skipped > 0) {
+                        msg += __(', {0} sem contacto', [r.message.skipped]);
+                    }
+                    frappe.show_alert({
+                        message: msg,
+                        indicator: r.message.added > 0 ? 'green' : 'orange'
+                    }, 7);
+                }
+            }
+        });
+    };
+
+    if (frm.is_dirty()) {
+        frm.save().then(do_call);
+    } else {
+        do_call();
+    }
+}
+
 function add_from_selection(frm, tipo, names) {
     if (!names.length) return;
-
-    // For multi-select types, we call adicionar_destinatarios once per name
-    let promises = [];
-    let total_added = 0;
-
-    function add_one(name, idx) {
-        frm.set_value('tipo_destinatario', tipo);
-
-        // Set the relevant link field
-        if (tipo === 'Catecumeno') frm.set_value('catecumeno', name);
-        else if (tipo === 'Catequista') frm.set_value('catequista', name);
-        else if (tipo === 'Turma') frm.set_value('turma', name);
-        else if (tipo === 'Preparacao do Sacramento') frm.set_value('preparacao_sacramento', name);
-
-        return frm.save().then(function () {
-            return new Promise(function (resolve) {
-                frappe.call({
-                    method: 'adicionar_destinatarios',
-                    doc: frm.doc,
-                    callback: function (r) {
-                        if (r.message) {
-                            total_added += r.message.added;
-                            // Reload doc to get the latest child rows before next iteration
-                            frm.reload_doc().then(resolve);
-                        } else {
-                            resolve();
-                        }
-                    }
-                });
-            });
-        });
-    }
-
-    frappe.dom.freeze('Adicionando destinat\u00e1rios...');
-
-    // Process sequentially to avoid race conditions
-    let chain = Promise.resolve();
-    names.forEach(function (name, idx) {
-        chain = chain.then(() => add_one(name, idx));
-    });
-
-    chain.then(function () {
-        frappe.dom.unfreeze();
-        let skipped = names.length - total_added;
-        let msg = __('{0} destinat\u00e1rio(s) adicionado(s)', [total_added]);
-        if (skipped > 0) {
-            msg += __(', {0} sem contacto', [skipped]);
-        }
-        frappe.show_alert({
-            message: msg,
-            indicator: total_added > 0 ? 'green' : 'orange'
-        }, 7);
-    }).catch(function () {
-        frappe.dom.unfreeze();
-        frm.reload_doc();
-    });
+    call_adicionar(frm, tipo, names);
 }
 
 // ============================================================
