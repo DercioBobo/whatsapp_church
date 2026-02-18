@@ -13,6 +13,7 @@
         "section_mensagem",
         "mensagem_html",
         "mensagem",
+        "anexo",
         "section_adicionar",
         "adicionar_html",
         "tipo_destinatario",
@@ -73,6 +74,12 @@
             "fieldname": "mensagem",
             "fieldtype": "Text",
             "label": "Mensagem",
+            "hidden": 1
+        },
+        {
+            "fieldname": "anexo",
+            "fieldtype": "Attach",
+            "label": "Anexo",
             "hidden": 1
         },
         {

@@ -109,6 +109,17 @@ class EnvioWhatsAppCatequese(Document):
         self.total_destinatarios = len(self.destinatarios) if self.destinatarios else 0
 
     @frappe.whitelist()
+    def limpar_destinatarios(self):
+        """Remove all recipients from the child table."""
+        if self.status != "Rascunho":
+            frappe.throw(_("Só é possível limpar destinatários quando o status é Rascunho"))
+
+        self.destinatarios = []
+        self.total_destinatarios = 0
+        self.save()
+        return {"success": True}
+
+    @frappe.whitelist()
     def adicionar_multiplos(self, tipo, nomes):
         """Add recipients from multiple records in a single call.
 
@@ -170,6 +181,21 @@ class EnvioWhatsAppCatequese(Document):
                     all_recipients.extend(resolved)
                 else:
                     skipped += 1
+        elif tipo == "Grupo":
+            for item in nomes:
+                if isinstance(item, dict):
+                    group_id = item.get("id", "")
+                    group_name = item.get("subject", group_id)
+                else:
+                    group_id = str(item)
+                    group_name = group_id
+                if group_id:
+                    all_recipients.append({
+                        "nome": group_name,
+                        "contacto": group_id,
+                        "origem": "Grupo",
+                        "referencia": group_name
+                    })
 
         added = 0
         for r in all_recipients:
@@ -202,10 +228,12 @@ class EnvioWhatsAppCatequese(Document):
         if not self.destinatarios:
             frappe.throw(_("Adicione pelo menos um destinatário"))
 
-        if not self.mensagem:
-            frappe.throw(_("Escreva a mensagem"))
+        if not self.mensagem and not self.anexo:
+            frappe.throw(_("Escreva a mensagem ou anexe um ficheiro"))
 
-        from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp
+        from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp, send_whatsapp_media
+
+        has_attachment = bool(self.anexo)
 
         self.db_set("status", "Enviando")
         frappe.db.commit()
@@ -215,13 +243,23 @@ class EnvioWhatsAppCatequese(Document):
 
         for row in self.destinatarios:
             try:
-                result = send_whatsapp(
-                    phone=row.contacto,
-                    message=self.mensagem,
-                    doctype=self.doctype,
-                    docname=self.name,
-                    queue=False
-                )
+                if has_attachment:
+                    result = send_whatsapp_media(
+                        phone=row.contacto,
+                        doctype=self.doctype,
+                        docname=self.name,
+                        file_url=self.anexo,
+                        caption=self.mensagem or "",
+                        queue=False
+                    )
+                else:
+                    result = send_whatsapp(
+                        phone=row.contacto,
+                        message=self.mensagem,
+                        doctype=self.doctype,
+                        docname=self.name,
+                        queue=False
+                    )
                 if result and result.get("success"):
                     row.db_set("status_envio", "Enviado")
                     enviados += 1

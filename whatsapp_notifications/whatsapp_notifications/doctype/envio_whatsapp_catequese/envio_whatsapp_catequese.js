@@ -73,12 +73,49 @@ function render_mensagem_area(frm) {
                 style="width: 100%; min-height: 100px; border: none; background: ${WA_COLORS.white};
                 border-radius: 8px; padding: 12px; font-size: 14px; resize: vertical;
                 outline: none; font-family: inherit;">${frappe.utils.escape_html(msg)}</textarea>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                <button class="wa-attach-btn" title="Anexar ficheiro"
+                    style="display: flex; align-items: center; gap: 6px; padding: 6px 14px;
+                    border: 1px solid #ccc; border-radius: 16px; background: white;
+                    color: #555; font-size: 12px; cursor: pointer; transition: all .15s;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#555">
+                        <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+                    </svg>
+                    Anexar Ficheiro
+                </button>
+                ${frm.doc.anexo ? `
+                <div class="wa-attachment-preview" style="display: flex; align-items: center; gap: 6px;
+                    padding: 4px 10px; background: #e8f5e9; border-radius: 12px; font-size: 12px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="${WA_COLORS.dark_green}">
+                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/>
+                    </svg>
+                    <span style="color: ${WA_COLORS.teal}; font-weight: 500; max-width: 200px;
+                        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        ${frappe.utils.escape_html(frm.doc.anexo.split('/').pop())}
+                    </span>
+                    <span class="wa-attach-remove" style="cursor: pointer; color: #999; font-size: 16px;
+                        line-height: 1; margin-left: 2px;">&times;</span>
+                </div>` : ''}
+            </div>
         </div>`;
     } else {
+        let attachment_html = '';
+        if (frm.doc.anexo) {
+            let fname = frm.doc.anexo.split('/').pop();
+            attachment_html = `
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+                background: rgba(0,0,0,0.05); border-radius: 6px; margin-bottom: 6px; font-size: 12px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="${WA_COLORS.teal}">
+                    <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/>
+                </svg>
+                <span style="color: ${WA_COLORS.teal}; font-weight: 500;">${frappe.utils.escape_html(fname)}</span>
+            </div>`;
+        }
         html += `
         <div style="background: ${WA_COLORS.light_bg}; border-radius: 12px; padding: 16px;">
             <div style="background: ${WA_COLORS.chat_bg}; border-radius: 8px; padding: 12px;
                 max-width: 85%; position: relative;">
+                ${attachment_html}
                 <div style="white-space: pre-wrap; font-size: 14px;">${frappe.utils.escape_html(msg)}</div>
                 <div style="text-align: right; margin-top: 4px;">
                     <span style="font-size: 11px; color: ${WA_COLORS.grey_text};">
@@ -98,6 +135,29 @@ function render_mensagem_area(frm) {
     if (is_draft) {
         frm.fields_dict.mensagem_html.$wrapper.find('.wa-message-input').on('change input', function () {
             frm.set_value('mensagem', $(this).val());
+        });
+
+        // Bind attach button
+        frm.fields_dict.mensagem_html.$wrapper.find('.wa-attach-btn').on('click', function () {
+            new frappe.ui.FileUploader({
+                doctype: frm.doctype,
+                docname: frm.doc.name,
+                make_attachments_public: true,
+                on_success: function (file) {
+                    frm.set_value('anexo', file.file_url);
+                    frm.dirty();
+                    render_mensagem_area(frm);
+                    render_enviar_area(frm);
+                }
+            });
+        });
+
+        // Bind attachment remove
+        frm.fields_dict.mensagem_html.$wrapper.find('.wa-attach-remove').on('click', function () {
+            frm.set_value('anexo', '');
+            frm.dirty();
+            render_mensagem_area(frm);
+            render_enviar_area(frm);
         });
     }
 }
@@ -183,11 +243,36 @@ function render_recipients_area(frm) {
                 </svg>
                 N\u00fameros Manuais
             </button>
+            <button class="wa-add-btn wa-group-btn" data-type="Grupo"
+                style="display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+                border: 1.5px solid ${WA_COLORS.green}; border-radius: 20px; background: white;
+                color: ${WA_COLORS.dark_green}; font-size: 13px; font-weight: 500; cursor: pointer;
+                transition: all .15s;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="${WA_COLORS.dark_green}">
+                    <path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/>
+                </svg>
+                Grupos WhatsApp
+            </button>
         </div>`;
     }
 
     // Recipient chips
     if (recipients.length > 0) {
+        if (is_draft) {
+            html += `
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                <button class="wa-clear-all-btn"
+                    style="display: flex; align-items: center; gap: 4px; padding: 4px 12px;
+                    border: 1px solid ${WA_COLORS.red}; border-radius: 12px; background: white;
+                    color: ${WA_COLORS.red}; font-size: 11px; font-weight: 500; cursor: pointer;
+                    transition: all .15s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="${WA_COLORS.red}">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                    Limpar Todos
+                </button>
+            </div>`;
+        }
         html += `<div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 12px;
             background: #f5f6f7; border-radius: 8px; max-height: 240px; overflow-y: auto;">`;
         recipients.forEach(function (r, idx) {
@@ -233,10 +318,16 @@ function render_recipients_area(frm) {
     frm.fields_dict.adicionar_html.$wrapper.find('.wa-add-btn').hover(
         function () { $(this).css({'background': WA_COLORS.teal, 'color': 'white'}).find('svg').css('fill', 'white'); },
         function () {
-            let is_manual = $(this).data('type') === 'Manual';
-            $(this).css({'background': 'white', 'color': is_manual ? '#555' : WA_COLORS.teal})
-                .find('svg').css('fill', is_manual ? '#555' : WA_COLORS.teal);
+            let type = $(this).data('type');
+            let color = type === 'Manual' ? '#555' : (type === 'Grupo' ? WA_COLORS.dark_green : WA_COLORS.teal);
+            $(this).css({'background': 'white', 'color': color}).find('svg').css('fill', color);
         }
+    );
+
+    // Bind clear all hover
+    frm.fields_dict.adicionar_html.$wrapper.find('.wa-clear-all-btn').hover(
+        function () { $(this).css({'background': WA_COLORS.red, 'color': 'white'}).find('svg').css('fill', 'white'); },
+        function () { $(this).css({'background': 'white', 'color': WA_COLORS.red}).find('svg').css('fill', WA_COLORS.red); }
     );
 
     // Bind add buttons
@@ -245,9 +336,40 @@ function render_recipients_area(frm) {
             let type = $(this).data('type');
             if (type === 'Manual') {
                 show_manual_dialog(frm);
+            } else if (type === 'Grupo') {
+                show_group_dialog(frm);
             } else {
                 show_multiselect_dialog(frm, type);
             }
+        });
+
+        // Bind clear all button
+        frm.fields_dict.adicionar_html.$wrapper.find('.wa-clear-all-btn').on('click', function () {
+            frappe.confirm(
+                __('Tem certeza que deseja remover todos os {0} destinatários?', [recipients.length]),
+                function () {
+                    let do_clear = function () {
+                        frappe.call({
+                            method: 'limpar_destinatarios',
+                            doc: frm.doc,
+                            freeze: true,
+                            freeze_message: 'Removendo destinatários...',
+                            callback: function () {
+                                frm.reload_doc();
+                                frappe.show_alert({
+                                    message: __('Todos os destinatários foram removidos.'),
+                                    indicator: 'green'
+                                }, 5);
+                            }
+                        });
+                    };
+                    if (frm.is_dirty()) {
+                        frm.save().then(do_clear);
+                    } else {
+                        do_clear();
+                    }
+                }
+            );
         });
 
         // Bind chip remove
@@ -278,7 +400,8 @@ function render_enviar_area(frm) {
         return;
     }
 
-    let disabled = count === 0 || !frm.doc.mensagem;
+    let has_attachment = !!frm.doc.anexo;
+    let disabled = count === 0 || (!frm.doc.mensagem && !has_attachment);
     let btn_style = disabled
         ? `background: #ccc; cursor: not-allowed;`
         : `background: ${WA_COLORS.green}; cursor: pointer;`;
@@ -529,6 +652,160 @@ function show_manual_dialog(frm) {
 }
 
 // ============================================================
+// WhatsApp group selection dialog
+// ============================================================
+function show_group_dialog(frm) {
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.api.fetch_whatsapp_groups',
+        freeze: true,
+        freeze_message: 'Carregando grupos WhatsApp...',
+        callback: function (r) {
+            if (!r.message || !r.message.success) {
+                frappe.msgprint(r.message ? r.message.error : 'Erro ao carregar grupos.');
+                return;
+            }
+
+            let groups = r.message.groups || [];
+            if (groups.length === 0) {
+                frappe.msgprint('Nenhum grupo WhatsApp encontrado.');
+                return;
+            }
+
+            let selected = new Set();
+
+            let dialog = new frappe.ui.Dialog({
+                title: 'Seleccionar Grupos WhatsApp',
+                size: 'large',
+                fields: [
+                    {fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar grupo...'},
+                    {fieldname: 'list_html', fieldtype: 'HTML'}
+                ],
+                primary_action_label: 'Adicionar Grupos',
+                primary_action: function () {
+                    if (selected.size === 0) {
+                        frappe.msgprint('Seleccione pelo menos um grupo.');
+                        return;
+                    }
+                    dialog.hide();
+                    let selected_groups = groups.filter(g => selected.has(g.id));
+                    call_adicionar(frm, 'Grupo', selected_groups);
+                }
+            });
+
+            function render_list(filter_text) {
+                filter_text = (filter_text || '').toLowerCase();
+                let filtered = groups.filter(g =>
+                    (g.subject || '').toLowerCase().includes(filter_text) ||
+                    (g.id || '').toLowerCase().includes(filter_text)
+                );
+
+                let list_html = '';
+
+                if (filtered.length > 0) {
+                    let all_selected = filtered.every(g => selected.has(g.id));
+                    list_html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center;
+                        padding: 6px 12px; border-bottom: 2px solid #eee; background: #fafafa;">
+                        <span style="font-size: 12px; color: ${WA_COLORS.grey_text};">
+                            ${filtered.length} grupo(s)
+                        </span>
+                        <div style="display: flex; gap: 8px;">
+                            <a href="#" class="wa-select-all" style="font-size: 12px; color: ${WA_COLORS.teal};
+                                font-weight: 500; text-decoration: none;">Seleccionar Todos</a>
+                            <span style="color: #ddd;">|</span>
+                            <a href="#" class="wa-unselect-all" style="font-size: 12px; color: #999;
+                                text-decoration: none;">Limpar</a>
+                        </div>
+                    </div>`;
+                }
+
+                list_html += '<div style="max-height: 380px; overflow-y: auto;">';
+
+                if (filtered.length === 0) {
+                    list_html += '<div style="text-align: center; padding: 20px; color: #999;">Nenhum grupo encontrado.</div>';
+                } else {
+                    filtered.forEach(function (g) {
+                        let is_checked = selected.has(g.id);
+                        let bg = is_checked ? '#e8f5e9' : 'white';
+                        list_html += `
+                        <div class="wa-select-row" data-id="${frappe.utils.escape_html(g.id)}"
+                            style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+                            border-bottom: 1px solid #f0f0f0; cursor: pointer; background: ${bg};
+                            transition: background .1s;">
+                            <div style="width: 20px; height: 20px; border-radius: 4px;
+                                border: 2px solid ${is_checked ? WA_COLORS.green : '#ccc'};
+                                background: ${is_checked ? WA_COLORS.green : 'white'};
+                                display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                ${is_checked ? '<span style="color: white; font-size: 12px;">&#10003;</span>' : ''}
+                            </div>
+                            <div style="width: 36px; height: 36px; border-radius: 50%; background: ${WA_COLORS.dark_green};
+                                display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                                </svg>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500; font-size: 14px;">${frappe.utils.escape_html(g.subject)}</div>
+                                <div style="font-size: 11px; color: ${WA_COLORS.grey_text};">
+                                    ${g.size ? g.size + ' membros' : ''}
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                }
+
+                list_html += '</div>';
+
+                list_html += `<div style="padding: 8px 12px; font-size: 12px; color: ${WA_COLORS.grey_text};
+                    border-top: 1px solid #eee; font-weight: 500;">
+                    ${selected.size} seleccionado(s) de ${groups.length}
+                </div>`;
+
+                dialog.fields_dict.list_html.$wrapper.html(list_html);
+
+                // Bind Select All / Unselect All
+                dialog.fields_dict.list_html.$wrapper.find('.wa-select-all').on('click', function (e) {
+                    e.preventDefault();
+                    filtered.forEach(g => selected.add(g.id));
+                    render_list(dialog.get_value('search'));
+                });
+                dialog.fields_dict.list_html.$wrapper.find('.wa-unselect-all').on('click', function (e) {
+                    e.preventDefault();
+                    filtered.forEach(g => selected.delete(g.id));
+                    render_list(dialog.get_value('search'));
+                });
+
+                // Bind row clicks
+                dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function () {
+                    let id = $(this).data('id');
+                    if (selected.has(id)) {
+                        selected.delete(id);
+                    } else {
+                        selected.add(id);
+                    }
+                    render_list(dialog.get_value('search'));
+                });
+
+                // Hover effect
+                dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').hover(
+                    function () { if (!selected.has($(this).data('id'))) $(this).css('background', '#f9f9f9'); },
+                    function () { if (!selected.has($(this).data('id'))) $(this).css('background', 'white'); }
+                );
+            }
+
+            render_list('');
+
+            dialog.fields_dict.search.$input.on('input', function () {
+                render_list($(this).val());
+            });
+
+            dialog.show();
+            setTimeout(() => dialog.fields_dict.search.$input.focus(), 200);
+        }
+    });
+}
+
+// ============================================================
 // Single server call to add all selected records at once
 // ============================================================
 function call_adicionar(frm, tipo, names) {
@@ -576,9 +853,21 @@ function add_from_selection(frm, tipo, names) {
 function do_enviar(frm) {
     let count = (frm.doc.destinatarios || []).length;
 
-    if (!frm.doc.mensagem) {
-        frappe.msgprint('Escreva a mensagem primeiro.');
+    if (!frm.doc.mensagem && !frm.doc.anexo) {
+        frappe.msgprint('Escreva a mensagem ou anexe um ficheiro.');
         return;
+    }
+
+    let attachment_note = '';
+    if (frm.doc.anexo) {
+        let fname = frm.doc.anexo.split('/').pop();
+        attachment_note = `
+        <div style="margin-top: 6px; font-size: 12px; color: ${WA_COLORS.teal};">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="${WA_COLORS.teal}" style="vertical-align: middle;">
+                <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+            </svg>
+            Anexo: ${frappe.utils.escape_html(fname)}
+        </div>`;
     }
 
     frappe.confirm(
@@ -594,6 +883,7 @@ function do_enviar(frm) {
             <div style="color: ${WA_COLORS.grey_text};">
                 ${count} destinat\u00e1rio${count !== 1 ? 's' : ''} ir\u00e3o receber a mensagem
             </div>
+            ${attachment_note}
         </div>`,
         function () {
             let do_send = function () {
