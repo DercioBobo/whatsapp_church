@@ -387,7 +387,28 @@ function show_multiselect_dialog(frm, doctype_type) {
                     r.name.toLowerCase().includes(filter_text)
                 );
 
-                let list_html = `<div style="max-height: 400px; overflow-y: auto;">`;
+                let list_html = '';
+
+                // Select All / Unselect All bar (only for multi-select)
+                if (!is_single_select && filtered.length > 0) {
+                    let all_filtered_selected = filtered.every(r => selected.has(r.name));
+                    list_html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center;
+                        padding: 6px 12px; border-bottom: 2px solid #eee; background: #fafafa;">
+                        <span style="font-size: 12px; color: ${WA_COLORS.grey_text};">
+                            ${filtered.length} resultado(s)
+                        </span>
+                        <div style="display: flex; gap: 8px;">
+                            <a href="#" class="wa-select-all" style="font-size: 12px; color: ${WA_COLORS.teal};
+                                font-weight: 500; text-decoration: none;">Seleccionar Todos</a>
+                            <span style="color: #ddd;">|</span>
+                            <a href="#" class="wa-unselect-all" style="font-size: 12px; color: #999;
+                                text-decoration: none;">Limpar</a>
+                        </div>
+                    </div>`;
+                }
+
+                list_html += `<div style="max-height: 380px; overflow-y: auto;">`;
 
                 if (filtered.length === 0) {
                     list_html += `<div style="text-align: center; padding: 20px; color: #999;">
@@ -409,7 +430,6 @@ function show_multiselect_dialog(frm, doctype_type) {
                             </div>
                             <div style="flex: 1;">
                                 <div style="font-weight: 500; font-size: 14px;">${frappe.utils.escape_html(rec.display)}</div>
-                                <div style="font-size: 11px; color: ${WA_COLORS.grey_text};">${frappe.utils.escape_html(rec.name)}</div>
                             </div>
                         </div>`;
                     });
@@ -420,12 +440,24 @@ function show_multiselect_dialog(frm, doctype_type) {
                 // Counter
                 if (!is_single_select) {
                     list_html += `<div style="padding: 8px 12px; font-size: 12px; color: ${WA_COLORS.grey_text};
-                        border-top: 1px solid #eee;">
+                        border-top: 1px solid #eee; font-weight: 500;">
                         ${selected.size} seleccionado(s) de ${records.length}
                     </div>`;
                 }
 
                 dialog.fields_dict.list_html.$wrapper.html(list_html);
+
+                // Bind Select All / Unselect All
+                dialog.fields_dict.list_html.$wrapper.find('.wa-select-all').on('click', function (e) {
+                    e.preventDefault();
+                    filtered.forEach(r => selected.add(r.name));
+                    render_list(dialog.get_value('search'));
+                });
+                dialog.fields_dict.list_html.$wrapper.find('.wa-unselect-all').on('click', function (e) {
+                    e.preventDefault();
+                    filtered.forEach(r => selected.delete(r.name));
+                    render_list(dialog.get_value('search'));
+                });
 
                 // Bind row clicks
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function () {
@@ -565,11 +597,15 @@ function add_from_selection(frm, tipo, names) {
 
     chain.then(function () {
         frappe.dom.unfreeze();
+        let skipped = names.length - total_added;
+        let msg = __('{0} destinat\u00e1rio(s) adicionado(s)', [total_added]);
+        if (skipped > 0) {
+            msg += __(', {0} sem contacto', [skipped]);
+        }
         frappe.show_alert({
-            message: __('{0} destinat\u00e1rio(s) adicionado(s) de {1} {2}(s)',
-                [total_added, names.length, tipo]),
-            indicator: 'green'
-        }, 5);
+            message: msg,
+            indicator: total_added > 0 ? 'green' : 'orange'
+        }, 7);
     }).catch(function () {
         frappe.dom.unfreeze();
         frm.reload_doc();

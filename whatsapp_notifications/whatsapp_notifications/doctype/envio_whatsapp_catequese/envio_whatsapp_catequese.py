@@ -104,7 +104,7 @@ class EnvioWhatsAppCatequese(Document):
         doc = frappe.get_doc("Catecumeno", self.catecumeno)
         raw_contacto = getattr(doc, "contacto", None)
         if not raw_contacto:
-            frappe.throw(_("O Catecumeno {0} não tem contacto definido").format(self.catecumeno))
+            return []
         nome = getattr(doc, "nome_completo", None) or getattr(doc, "nome", None) or self.catecumeno
         numbers = parse_contacto(raw_contacto)
         return [{
@@ -121,7 +121,7 @@ class EnvioWhatsAppCatequese(Document):
         doc = frappe.get_doc("Catequista", self.catequista)
         raw_contacto = getattr(doc, "contacto", None)
         if not raw_contacto:
-            frappe.throw(_("O Catequista {0} não tem contacto definido").format(self.catequista))
+            return []
         nome = getattr(doc, "nome_completo", None) or getattr(doc, "nome", None) or self.catequista
         numbers = parse_contacto(raw_contacto)
         return [{
