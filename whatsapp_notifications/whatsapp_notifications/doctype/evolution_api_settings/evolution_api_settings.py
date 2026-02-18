@@ -77,7 +77,7 @@ class EvolutionAPISettings(Document):
 
             headers = {
                 "Content-Type": "application/json",
-                "apikey": self.get_password("api_key") or self.api_key
+                "apikey": self.api_key
             }
 
             payload = {
@@ -144,7 +144,7 @@ class EvolutionAPISettings(Document):
 
             headers = {
                 "Content-Type": "application/json",
-                "apikey": self.get_password("api_key") or self.api_key
+                "apikey": self.api_key
             }
 
             response = make_request("GET", url, headers=headers)
@@ -189,7 +189,7 @@ class EvolutionAPISettings(Document):
             
             headers = {
                 "Content-Type": "application/json",
-                "apikey": self.get_password("api_key") or self.api_key
+                "apikey": self.api_key
             }
             
             # Use frappe's HTTP method (works in v13-v15)
@@ -255,7 +255,7 @@ def get_settings():
             settings = {
                 "enabled": doc.enabled,
                 "api_url": doc.api_url,
-                "api_key": doc.get_password("api_key") if doc.api_key else None,
+                "api_key": doc.api_key,
                 "instance_name": doc.instance_name,
                 "default_country_code": doc.default_country_code or "258",
                 "local_number_length": doc.local_number_length or 9,

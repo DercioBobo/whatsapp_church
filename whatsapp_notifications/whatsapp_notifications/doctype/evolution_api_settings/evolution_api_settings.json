@@ -67,7 +67,7 @@
         },
         {
             "fieldname": "api_key",
-            "fieldtype": "Password",
+            "fieldtype": "Data",
             "label": "API Key",
             "description": "Evolution API authentication key"
         },
