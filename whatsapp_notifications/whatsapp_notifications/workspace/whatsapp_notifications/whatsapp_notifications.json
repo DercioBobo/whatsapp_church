@@ -1,0 +1,162 @@
+{
+ "charts": [],
+ "color": "#25D366",
+ "content": "[{\"id\":\"conf_header\",\"type\":\"header\",\"data\":{\"text\":\"<b>Configura\u00e7\u00e3o<\\/b>\",\"col\":12,\"level\":4}},{\"id\":\"conf_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Configura\u00e7\u00e3o\",\"col\":4}},{\"id\":\"msg_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Mensagens\",\"col\":4}},{\"id\":\"aprov_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Aprova\u00e7\u00f5es\",\"col\":4}},{\"id\":\"cat_header\",\"type\":\"header\",\"data\":{\"text\":\"<b>Catequese<\\/b>\",\"col\":12,\"level\":4}},{\"id\":\"cat_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Catequese\",\"col\":4}}]",
+ "doctype": "Workspace",
+ "extends_another_page": 0,
+ "hide_custom": 0,
+ "icon": "fa fa-comments",
+ "is_hidden": 0,
+ "label": "WhatsApp Notifications",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Configura\u00e7\u00e3o",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Evolution API Settings",
+   "link_count": 0,
+   "link_to": "Evolution API Settings",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WhatsApp Notification Rule",
+   "link_count": 0,
+   "link_to": "WhatsApp Notification Rule",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Mensagens",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WhatsApp Message Log",
+   "link_count": 0,
+   "link_to": "WhatsApp Message Log",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WhatsApp Auto Report",
+   "link_count": 0,
+   "link_to": "WhatsApp Auto Report",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Aprova\u00e7\u00f5es",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WhatsApp Approval Template",
+   "link_count": 0,
+   "link_to": "WhatsApp Approval Template",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WhatsApp Approval Request",
+   "link_count": 0,
+   "link_to": "WhatsApp Approval Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Catequese",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Envio WhatsApp Catequese",
+   "link_count": 0,
+   "link_to": "Envio WhatsApp Catequese",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  }
+ ],
+ "module": "WhatsApp Notifications",
+ "name": "WhatsApp Notifications",
+ "public": 1,
+ "restrict_to_domain": null,
+ "roles": [],
+ "shortcuts": [
+  {
+   "color": "#25D366",
+   "format": "",
+   "label": "Notification Rules",
+   "link_to": "WhatsApp Notification Rule",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "#5e64ff",
+   "format": "",
+   "label": "Message Log",
+   "link_to": "WhatsApp Message Log",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "#f4811f",
+   "format": "",
+   "label": "Approval Requests",
+   "link_to": "WhatsApp Approval Request",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "#2490ef",
+   "format": "",
+   "label": "Envio Catequese",
+   "link_to": "Envio WhatsApp Catequese",
+   "stats_filter": "",
+   "type": "DocType"
+  }
+ ],
+ "title": "WhatsApp Notifications"
+}
