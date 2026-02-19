@@ -1,8 +1,31 @@
 // WhatsApp Notification Rule - Client Script
 // Enhanced form with field suggestions, template preview, and testing
 
+const RECIPIENT_HINTS = {
+    'Field Value':    'Reads the phone number from the document field selected below.',
+    'Fixed Number':   'Always sends to the specific phone numbers you enter below.',
+    'Both':           'Sends to both the document field phone AND the fixed numbers.',
+    'Group':          'Sends to a WhatsApp group — click "Select Group" to choose one.',
+    'Phone and Group':'Sends to the document field phone AND the WhatsApp group.'
+};
+
+const EVENT_HINTS = {
+    'After Insert': 'Fires when a new record is saved for the first time.',
+    'On Update':    'Fires every time a record is saved (after every edit).',
+    'On Submit':    'Fires when an amendable document is submitted.',
+    'On Cancel':    'Fires when a submitted document is cancelled.',
+    'On Change':    'Fires only when a specific field value changes.',
+    'On Trash':     'Fires when a record is deleted.'
+};
+
 frappe.ui.form.on('WhatsApp Notification Rule', {
     refresh: function (frm) {
+        // Status indicator badge
+        frm.page.set_indicator(
+            frm.doc.enabled ? __('Active') : __('Inactive'),
+            frm.doc.enabled ? 'green' : 'red'
+        );
+
         // Add preview button
         if (!frm.is_new() && frm.doc.document_type) {
             frm.add_custom_button(__('Preview Message'), function () {
@@ -20,14 +43,11 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
             }, __('Actions'));
         }
 
-        // Template help
+        // Template help (collapsible)
         setup_template_help(frm);
 
-        // Initialize group field visibility
-        let needs_group = ['Group', 'Phone and Group'].includes(frm.doc.recipient_type);
-        frm.toggle_display('group_id', needs_group);
-        frm.toggle_display('group_name', needs_group && frm.doc.group_id);
-        frm.toggle_display('select_group_button', needs_group);
+        // Recipient type hint
+        show_recipient_hint(frm);
 
         // Setup field selectors on refresh
         if (frm.doc.document_type) {
@@ -41,6 +61,13 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         }
     },
 
+    enabled: function (frm) {
+        frm.page.set_indicator(
+            frm.doc.enabled ? __('Active') : __('Inactive'),
+            frm.doc.enabled ? 'green' : 'red'
+        );
+    },
+
     document_type: function (frm) {
         // Clear field suggestions when doctype changes
         frm.set_value('phone_field', '');
@@ -49,9 +76,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         frm.set_value('child_phone_field', '');
 
         if (frm.doc.document_type) {
-            // Load field options
             load_field_options(frm);
-            // Load child table options if child table mode is on
             if (frm.doc.use_child_table) {
                 load_child_table_options(frm);
             }
@@ -59,12 +84,15 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
     },
 
     event: function (frm) {
-        // Show/hide value_changed field
         frm.toggle_reqd('value_changed', frm.doc.event === 'On Change');
+
+        let hint = EVENT_HINTS[frm.doc.event];
+        if (hint) {
+            frappe.show_alert({ message: __(hint), indicator: 'blue' }, 5);
+        }
     },
 
     recipient_type: function (frm) {
-        // Determine which fields to require based on recipient type
         let needs_phone_field = ['Field Value', 'Both', 'Phone and Group'].includes(frm.doc.recipient_type);
         let needs_fixed = ['Fixed Number', 'Both'].includes(frm.doc.recipient_type);
         let needs_group = ['Group', 'Phone and Group'].includes(frm.doc.recipient_type);
@@ -72,16 +100,13 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         frm.toggle_reqd('phone_field', needs_phone_field && frm.doc.recipient_type !== 'Phone and Group');
         frm.toggle_reqd('fixed_recipients', needs_fixed);
 
-        // Show/hide group fields
-        frm.toggle_display('group_id', needs_group);
-        frm.toggle_display('group_name', needs_group && frm.doc.group_id);
-        frm.toggle_display('select_group_button', needs_group);
-
-        // Clear group fields if not needed
+        // Clear group fields when switching away from group types
         if (!needs_group) {
             frm.set_value('group_id', '');
             frm.set_value('group_name', '');
         }
+
+        show_recipient_hint(frm);
     },
 
     select_group_button: function (frm) {
@@ -95,7 +120,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
             frm.set_value('child_table', '');
             frm.set_value('child_phone_field', '');
         }
-        // Refresh template help to show row variables
+        // Refresh template help to show/hide row variables section
         setup_template_help(frm);
     },
 
@@ -107,6 +132,20 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
     }
 });
 
+function show_recipient_hint(frm) {
+    let $wrapper = frm.fields_dict.recipient_type && frm.fields_dict.recipient_type.$wrapper;
+    if (!$wrapper) return;
+
+    $wrapper.find('.recipient-hint').remove();
+
+    let hint = RECIPIENT_HINTS[frm.doc.recipient_type];
+    if (hint) {
+        $wrapper.append(
+            `<p class="recipient-hint help-box small text-muted" style="margin-top:4px;">${__(hint)}</p>`
+        );
+    }
+}
+
 function load_field_options(frm) {
     if (!frm.doc.document_type) return;
 
@@ -117,18 +156,13 @@ function load_field_options(frm) {
             if (r.message && r.message.success) {
                 var fields = r.message.fields;
 
-                // Populate Select options for phone_field
                 let phone_options = fields.map(f => ({
                     label: `${f.label} (${f.fieldname})`,
                     value: f.fieldname
                 }));
-
-                // Add empty option
                 phone_options.unshift({ label: '', value: '' });
 
                 set_field_options(frm, 'phone_field', phone_options);
-
-                // Populate Select options for value_changed
                 set_field_options(frm, 'value_changed', phone_options);
             }
         }
@@ -191,67 +225,87 @@ function load_child_phone_field_options(frm) {
 function setup_template_help(frm) {
     if (!frm.doc.document_type) return;
 
-    // Remove any existing help text first to prevent duplication
-    frm.fields_dict.message_template.$wrapper.siblings('.template-help').remove();
+    let $msg_wrapper = frm.fields_dict.message_template && frm.fields_dict.message_template.$wrapper;
+    if (!$msg_wrapper) return;
 
-    // Build child table help section
-    let child_table_help = '';
+    // Remove existing toggle/panel to rebuild
+    $msg_wrapper.siblings('.template-help-toggle, .template-help-panel').remove();
+
+    // Child table row variables (shown only when use_child_table is on)
+    let child_section = '';
     if (frm.doc.use_child_table) {
-        child_table_help = `
-            <p class="text-muted small mb-2 mt-2"><strong>${__('Child Table Row Variables:')}</strong></p>
-            <ul class="small mb-2">
-                <li><code>{{ row.fieldname }}</code> - ${__('Any field from the child table row')}</li>
-                <li><code>{{ row.idx }}</code> - ${__('Row number')}</li>
-                <li><code>{{ row.nome }}</code> - ${__('Example: row name field')}</li>
-                <li><code>{{ row.contacto }}</code> - ${__('Example: row phone field')}</li>
-            </ul>
-            <p class="text-muted small mb-2"><strong>${__('Row Condition examples:')}</strong></p>
-            <ul class="small mb-2">
-                <li><code>{{ row.pago == 1 }}</code> - ${__('Only rows where pago is checked')}</li>
-                <li><code>{{ row.status == "Aprovado" }}</code> - ${__('Only rows with specific status')}</li>
-            </ul>
-        `;
+        child_section = `
+            <div style="margin-bottom:12px;">
+                <strong>${__('Child Table Row Variables')}</strong>
+                <pre style="background:#f4f5f6;padding:8px;border-radius:4px;margin-top:4px;">{{ row.fieldname }}
+{{ row.idx }}
+{{ row.nome }}
+{{ row.contacto }}</pre>
+                <p class="text-muted small" style="margin-top:4px;">${__('Row Condition examples:')}</p>
+                <pre style="background:#f4f5f6;padding:8px;border-radius:4px;">{{ row.pago == 1 }}
+{{ row.status == "Aprovado" }}</pre>
+            </div>`;
     }
 
-    // Add help text showing available fields
-    let help_html = `
-        <div class="template-help mt-3 p-3 bg-light rounded">
-            <h6><i class="fa fa-info-circle"></i> ${__('Template Variables')}</h6>
-            <p class="text-muted small mb-2">${__('Use Jinja2 syntax to include document data:')}</p>
-            <ul class="small mb-2">
-                <li><code>{{ doc.name }}</code> - ${__('Document ID')}</li>
-                <li><code>{{ doc.fieldname }}</code> - ${__('Any document field')}</li>
-                <li><code>{{ format_date(doc.date_field) }}</code> - ${__('Formatted date')}</li>
-                <li><code>{{ format_currency(doc.amount, "MZN") }}</code> - ${__('Formatted currency')}</li>
-            </ul>
-            ${child_table_help}
-            <p class="text-muted small mb-2"><strong>${__('Fetching linked documents:')}</strong></p>
-            <p class="text-muted small mb-1">${__('Use frappe.get_doc() to pull data from any linked DocType:')}</p>
-            <pre class="small mb-2 p-2 bg-white border rounded">{% set t = frappe.get_doc("Turma", doc.turma) %}
+    let panel_html = `
+        <div class="template-help-panel" style="display:none;margin-top:8px;">
+            <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                    <strong>${__('Document Variables')}</strong>
+                    <pre style="background:#f4f5f6;padding:8px;border-radius:4px;margin-top:4px;">{{ doc.name }}
+{{ doc.fieldname }}
+{{ format_date(doc.date_field) }}
+{{ format_currency(doc.amount, "MZN") }}</pre>
+                    ${child_section}
+                    <strong>${__('Fetch linked document')}</strong>
+                    <pre style="background:#f4f5f6;padding:8px;border-radius:4px;margin-top:4px;">{% set t = frappe.get_doc("Turma", doc.turma) %}
 Local: {{ t.local }}
-Dia/Hora: {{ t.dia }} às {{ t.hora }}</pre>
-            <p class="text-muted small mb-1">${__('Loop over a child table of a linked doc:')}</p>
-            <pre class="small mb-2 p-2 bg-white border rounded">{% set t = frappe.get_doc("Turma", doc.turma) %}
+Dia: {{ t.dia }}</pre>
+                </div>
+                <div style="flex:1;min-width:220px;">
+                    <strong>${__('WhatsApp Formatting')}</strong>
+                    <pre style="background:#f4f5f6;padding:8px;border-radius:4px;margin-top:4px;">*bold*
+_italic_
+~strikethrough~</pre>
+                    <strong>${__('Conditionals &amp; Loops')}</strong>
+                    <pre style="background:#f4f5f6;padding:8px;border-radius:4px;margin-top:4px;">{% if doc.observacoes %}
+Obs: {{ doc.observacoes }}
+{% endif %}
+
+{% set t = frappe.get_doc("Turma", doc.turma) %}
 {% for c in t.catequistas %}
 - {{ c.nome }}
 {% endfor %}</pre>
-            <p class="text-muted small mb-1">${__('Conditional blocks:')}</p>
-            <pre class="small mb-2 p-2 bg-white border rounded">{% if doc.observacoes %}
-Obs: {{ doc.observacoes }}
-{% endif %}</pre>
-            <p class="text-muted small mb-1">${__('WhatsApp formatting:')}</p>
-            <ul class="small mb-0">
-                <li><code>*bold*</code> | <code>_italic_</code> | <code>~strikethrough~</code></li>
-            </ul>
-        </div>
-    `;
+                </div>
+            </div>
+        </div>`;
 
-    // Add after message_template field
-    frm.fields_dict.message_template.$wrapper.after(help_html);
+    let toggle_html = `<button class="template-help-toggle btn btn-xs btn-default" style="margin-top:8px;">
+        &#128214; ${__('Template Help')}
+    </button>`;
+
+    $msg_wrapper.after(panel_html);
+    $msg_wrapper.after(toggle_html);
+
+    // Restore open state if previously open
+    if (frm._help_open) {
+        $msg_wrapper.siblings('.template-help-panel').show();
+        $msg_wrapper.siblings('.template-help-toggle').text(`\u{1F4D6} ${__('Template Help')} \u25B2`);
+    }
+
+    // Toggle handler
+    $msg_wrapper.siblings('.template-help-toggle').on('click', function () {
+        let $panel = $msg_wrapper.siblings('.template-help-panel');
+        frm._help_open = !frm._help_open;
+        $panel.toggle(frm._help_open);
+        $(this).text(frm._help_open
+            ? `\u{1F4D6} ${__('Template Help')} \u25B2`
+            : `\u{1F4D6} ${__('Template Help')}`
+        );
+    });
 }
 
 function show_preview_dialog(frm) {
-    // Get a recent document of this type for preview
     frappe.call({
         method: 'frappe.client.get_list',
         args: {
@@ -294,8 +348,6 @@ function show_preview_dialog(frm) {
             });
 
             dialog.show();
-
-            // Initial preview
             render_preview(frm, options[0], dialog);
         }
     });
@@ -312,7 +364,6 @@ function render_preview(frm, docname, dialog) {
             if (r.message) {
                 let html = '';
 
-                // Per-row previews for child table rules
                 if (r.message.row_previews && r.message.row_previews.length > 0) {
                     let rows_html = r.message.row_previews.map((rp, i) => `
                         <div class="mb-3">
@@ -338,7 +389,6 @@ function render_preview(frm, docname, dialog) {
                         </div>
                     `;
                 } else {
-                    // Standard single-message preview
                     html = `
                         <div class="preview-container">
                             <div class="mb-3">
@@ -388,7 +438,6 @@ function show_test_dialog(frm) {
         ],
         primary_action_label: __('Send Test'),
         primary_action: function (values) {
-            // First preview the message
             frappe.call({
                 method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.preview_message',
                 args: {
@@ -397,7 +446,6 @@ function show_test_dialog(frm) {
                 },
                 callback: function (r) {
                     if (r.message && r.message.message) {
-                        // Now send the test
                         frappe.call({
                             method: 'whatsapp_notifications.whatsapp_notifications.api.send_whatsapp',
                             args: {
@@ -447,7 +495,6 @@ function show_group_selection_dialog(frm) {
                     return;
                 }
 
-                // Build options for the select field
                 let options = groups.map(g => ({
                     value: g.id,
                     label: g.subject + ' (' + g.size + ' members)'
@@ -486,14 +533,12 @@ function show_group_selection_dialog(frm) {
                     }
                 });
 
-                // Populate the select with formatted options
                 let $select = dialog.fields_dict.group.$input;
                 $select.empty();
                 options.forEach(opt => {
                     $select.append($('<option></option>').val(opt.value).text(opt.label));
                 });
 
-                // Pre-select current group if set
                 if (frm.doc.group_id) {
                     $select.val(frm.doc.group_id);
                 }
