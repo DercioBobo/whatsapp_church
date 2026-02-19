@@ -205,6 +205,11 @@ function setup_template_help(frm) {
                 <li><code>{{ row.nome }}</code> - ${__('Example: row name field')}</li>
                 <li><code>{{ row.contacto }}</code> - ${__('Example: row phone field')}</li>
             </ul>
+            <p class="text-muted small mb-2"><strong>${__('Row Condition examples:')}</strong></p>
+            <ul class="small mb-2">
+                <li><code>{{ row.pago == 1 }}</code> - ${__('Only rows where pago is checked')}</li>
+                <li><code>{{ row.status == "Aprovado" }}</code> - ${__('Only rows with specific status')}</li>
+            </ul>
         `;
     }
 

@@ -241,6 +241,10 @@ class WhatsAppNotificationRule(Document):
                 if self.only_changed_rows and self.event in ("On Update", "On Change"):
                     child_rows = self._filter_changed_rows(doc, child_rows)
 
+                # Apply row condition filter
+                if self.row_condition:
+                    child_rows = self._filter_by_row_condition(doc, child_rows)
+
                 for row in child_rows:
                     phone = getattr(row, self.child_phone_field, None)
                     if phone:
@@ -312,7 +316,40 @@ class WhatsAppNotificationRule(Document):
                     changed.append(row)
 
         return changed
-    
+
+    def _filter_by_row_condition(self, doc, child_rows):
+        """
+        Filter child table rows by a Jinja2 condition.
+
+        The condition template has access to both `doc` and `row`.
+        Only rows where the condition renders to a truthy value are kept.
+
+        Args:
+            doc: The parent document
+            child_rows: List of child table rows
+
+        Returns:
+            list: Rows matching the condition
+        """
+        filtered = []
+        for row in child_rows:
+            try:
+                context = get_template_context(doc)
+                context["row"] = row
+                result = frappe.render_template(self.row_condition, context)
+                if isinstance(result, str):
+                    result = result.strip().lower() not in ("", "false", "0", "none", "null")
+                if result:
+                    filtered.append(row)
+            except Exception as e:
+                frappe.log_error(
+                    "Row condition error (rule: {}, row {}): {}".format(
+                        self.rule_name, row.idx, str(e)
+                    ),
+                    "WhatsApp Row Condition Error"
+                )
+        return filtered
+
     def render_message(self, doc, for_owner=False, row=None):
         """
         Render the message template with document context

@@ -20,6 +20,7 @@
         "child_table",
         "child_phone_field",
         "only_changed_rows",
+        "row_condition",
         "recipient_type",
         "column_break_recipient",
         "fixed_recipients",
@@ -141,6 +142,14 @@
             "label": "Only New/Changed Rows",
             "description": "Only send to rows that were added or modified (not all rows)",
             "depends_on": "eval:doc.use_child_table==1 && (doc.event=='On Update' || doc.event=='On Change')"
+        },
+        {
+            "fieldname": "row_condition",
+            "fieldtype": "Code",
+            "label": "Row Condition",
+            "description": "Jinja2 condition per row. Only rows where this evaluates to True will receive a message. Example: {{ row.pago == 1 }}",
+            "options": "Jinja",
+            "depends_on": "eval:doc.use_child_table==1 && doc.child_table"
         },
         {
             "fieldname": "recipient_type",
