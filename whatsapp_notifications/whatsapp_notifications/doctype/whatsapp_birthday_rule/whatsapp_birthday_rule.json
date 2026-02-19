@@ -1,0 +1,263 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "field:rule_name",
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "rule_name",
+        "enabled",
+        "document_type",
+        "column_break_ident",
+        "days_before",
+        "send_time",
+        "section_campos",
+        "birthdate_field",
+        "phone_field",
+        "name_field",
+        "column_break_campos",
+        "filter_field",
+        "filter_operator",
+        "filter_value",
+        "section_person",
+        "send_to_person",
+        "person_message",
+        "section_group",
+        "send_to_group",
+        "group_id",
+        "select_group_button",
+        "group_message",
+        "section_additional",
+        "send_to_additional",
+        "additional_message",
+        "additional_recipients",
+        "section_estado",
+        "last_run",
+        "last_status",
+        "column_break_estado",
+        "last_count",
+        "last_error"
+    ],
+    "fields": [
+        {
+            "fieldname": "rule_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Nome da Regra",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "default": "1",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "in_list_view": 1,
+            "label": "Ativo"
+        },
+        {
+            "fieldname": "document_type",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Tipo de Documento",
+            "options": "DocType",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_ident",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "description": "Enviar N dias antes do anivers\u00e1rio (0 = no pr\u00f3prio dia)",
+            "fieldname": "days_before",
+            "fieldtype": "Int",
+            "label": "Dias de Antecipa\u00e7\u00e3o"
+        },
+        {
+            "default": "08:00:00",
+            "fieldname": "send_time",
+            "fieldtype": "Time",
+            "label": "Hora de Envio",
+            "reqd": 1
+        },
+        {
+            "fieldname": "section_campos",
+            "fieldtype": "Section Break",
+            "label": "Campos do Documento"
+        },
+        {
+            "fieldname": "birthdate_field",
+            "fieldtype": "Select",
+            "label": "Campo de Data de Nascimento",
+            "reqd": 1
+        },
+        {
+            "fieldname": "phone_field",
+            "fieldtype": "Select",
+            "label": "Campo de Telefone"
+        },
+        {
+            "fieldname": "name_field",
+            "fieldtype": "Select",
+            "label": "Campo de Nome"
+        },
+        {
+            "fieldname": "column_break_campos",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Filtrar registros (opcional)",
+            "fieldname": "filter_field",
+            "fieldtype": "Select",
+            "label": "Campo de Filtro"
+        },
+        {
+            "fieldname": "filter_operator",
+            "fieldtype": "Select",
+            "label": "Operador",
+            "options": "\n=\n!=\n>\n<\nlike\nis set\nis not set",
+            "depends_on": "eval:doc.filter_field"
+        },
+        {
+            "fieldname": "filter_value",
+            "fieldtype": "Data",
+            "label": "Valor do Filtro",
+            "depends_on": "eval:doc.filter_field && !['is set','is not set'].includes(doc.filter_operator)"
+        },
+        {
+            "fieldname": "section_person",
+            "fieldtype": "Section Break",
+            "label": "Mensagem ao Anivers\u00e1riante"
+        },
+        {
+            "default": "1",
+            "fieldname": "send_to_person",
+            "fieldtype": "Check",
+            "label": "Enviar ao Anivers\u00e1riante"
+        },
+        {
+            "fieldname": "person_message",
+            "fieldtype": "Code",
+            "label": "Mensagem ao Anivers\u00e1riante",
+            "options": "Jinja",
+            "depends_on": "eval:doc.send_to_person==1",
+            "description": "Vari\u00e1veis: {{ doc.fieldname }}, {{ age }}, {{ days_until }}, {{ birthday_date }}"
+        },
+        {
+            "fieldname": "section_group",
+            "fieldtype": "Section Break",
+            "label": "Mensagem para Grupo"
+        },
+        {
+            "fieldname": "send_to_group",
+            "fieldtype": "Check",
+            "label": "Enviar para Grupo"
+        },
+        {
+            "fieldname": "group_id",
+            "fieldtype": "Data",
+            "label": "ID do Grupo",
+            "depends_on": "eval:doc.send_to_group==1"
+        },
+        {
+            "fieldname": "select_group_button",
+            "fieldtype": "Button",
+            "label": "Selecionar Grupo",
+            "depends_on": "eval:doc.send_to_group==1"
+        },
+        {
+            "fieldname": "group_message",
+            "fieldtype": "Code",
+            "label": "Mensagem para o Grupo",
+            "options": "Jinja",
+            "depends_on": "eval:doc.send_to_group==1",
+            "description": "Vari\u00e1veis: {{ doc.fieldname }}, {{ age }}, {{ days_until }}, {{ birthday_date }}"
+        },
+        {
+            "fieldname": "section_additional",
+            "fieldtype": "Section Break",
+            "label": "Destinat\u00e1rios Adicionais"
+        },
+        {
+            "fieldname": "send_to_additional",
+            "fieldtype": "Check",
+            "label": "Enviar para Destinat\u00e1rios Adicionais"
+        },
+        {
+            "fieldname": "additional_message",
+            "fieldtype": "Code",
+            "label": "Mensagem para Destinat\u00e1rios Adicionais",
+            "options": "Jinja",
+            "depends_on": "eval:doc.send_to_additional==1",
+            "description": "Vari\u00e1veis: {{ doc.fieldname }}, {{ age }}, {{ days_until }}, {{ birthday_date }}"
+        },
+        {
+            "fieldname": "additional_recipients",
+            "fieldtype": "Table",
+            "label": "Destinat\u00e1rios Adicionais",
+            "options": "WhatsApp Birthday Additional Recipient",
+            "depends_on": "eval:doc.send_to_additional==1"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_estado",
+            "fieldtype": "Section Break",
+            "label": "Estado"
+        },
+        {
+            "fieldname": "last_run",
+            "fieldtype": "Datetime",
+            "label": "\u00daltima Execu\u00e7\u00e3o",
+            "read_only": 1
+        },
+        {
+            "fieldname": "last_status",
+            "fieldtype": "Data",
+            "label": "\u00daltimo Estado",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_estado",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "last_count",
+            "fieldtype": "Int",
+            "label": "Enviados na \u00daltima Execu\u00e7\u00e3o",
+            "read_only": 1
+        },
+        {
+            "fieldname": "last_error",
+            "fieldtype": "Small Text",
+            "label": "\u00daltimo Erro",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "WhatsApp Birthday Rule",
+    "naming_rule": "By fieldname",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 0,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}

@@ -321,3 +321,39 @@ def trigger_cleanup():
         now=True
     )
     return {"status": "triggered"}
+
+
+def process_birthday_rules():
+    """
+    Check all enabled birthday rules and enqueue those whose send_time window is now.
+    Called hourly by scheduler.
+    """
+    try:
+        rules = frappe.get_all(
+            "WhatsApp Birthday Rule",
+            filters={"enabled": 1},
+            pluck="name"
+        )
+
+        for rule_name in rules:
+            try:
+                rule = frappe.get_doc("WhatsApp Birthday Rule", rule_name)
+
+                if rule.is_time_to_send() and not rule.was_run_today():
+                    frappe.enqueue(
+                        "whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_birthday_rule.whatsapp_birthday_rule.process_birthday_rule",
+                        rule_name=rule_name,
+                        queue="long"
+                    )
+
+            except Exception as e:
+                frappe.log_error(
+                    "Error checking birthday rule {}: {}".format(rule_name, str(e)),
+                    "WhatsApp Birthday Rule Scheduler Error"
+                )
+
+    except Exception as e:
+        frappe.log_error(
+            "WhatsApp Birthday Rules scheduler error: {}".format(str(e)),
+            "WhatsApp Birthday Rule Scheduler Error"
+        )

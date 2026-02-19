@@ -1,0 +1,47 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "label",
+        "phone",
+        "is_group"
+    ],
+    "fields": [
+        {
+            "fieldname": "label",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Descri\u00e7\u00e3o"
+        },
+        {
+            "fieldname": "phone",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Telefone ou ID do Grupo",
+            "reqd": 1
+        },
+        {
+            "fieldname": "is_group",
+            "fieldtype": "Check",
+            "in_list_view": 1,
+            "label": "\u00c9 Grupo",
+            "default": "0"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "WhatsApp Birthday Additional Recipient",
+    "owner": "Administrator",
+    "permissions": [],
+    "quick_entry": 0,
+    "sort_field": "creation",
+    "sort_order": "ASC",
+    "track_changes": 0
+}
