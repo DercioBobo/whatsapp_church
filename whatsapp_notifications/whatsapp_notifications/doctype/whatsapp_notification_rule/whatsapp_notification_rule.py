@@ -65,6 +65,9 @@ class WhatsAppNotificationRule(Document):
                 # Test render with dummy data (include row for child table templates)
                 test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
                 frappe.render_template(self.message_template, test_context)
+            except (frappe.DoesNotExistError, frappe.ValidationError):
+                # Template is syntactically valid but relies on real linked docs — that's fine
+                pass
             except Exception as e:
                 frappe.throw(_("Invalid message template: {}").format(str(e)))
 
@@ -72,6 +75,8 @@ class WhatsAppNotificationRule(Document):
             try:
                 test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
                 frappe.render_template(self.owner_message_template, test_context)
+            except (frappe.DoesNotExistError, frappe.ValidationError):
+                pass
             except Exception as e:
                 frappe.throw(_("Invalid owner message template: {}").format(str(e)))
     
@@ -83,6 +88,8 @@ class WhatsAppNotificationRule(Document):
                 test_context = {"doc": frappe._dict({"name": "TEST", "status": "Test"}), "frappe": frappe}
                 result = frappe.render_template(self.condition, test_context)
                 # Result should be truthy/falsy
+            except (frappe.DoesNotExistError, frappe.ValidationError):
+                pass
             except Exception as e:
                 frappe.throw(_("Invalid condition: {}").format(str(e)))
     

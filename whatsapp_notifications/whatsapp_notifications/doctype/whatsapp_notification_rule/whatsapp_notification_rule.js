@@ -225,6 +225,20 @@ function setup_template_help(frm) {
                 <li><code>{{ format_currency(doc.amount, "MZN") }}</code> - ${__('Formatted currency')}</li>
             </ul>
             ${child_table_help}
+            <p class="text-muted small mb-2"><strong>${__('Fetching linked documents:')}</strong></p>
+            <p class="text-muted small mb-1">${__('Use frappe.get_doc() to pull data from any linked DocType:')}</p>
+            <pre class="small mb-2 p-2 bg-white border rounded">{% set t = frappe.get_doc("Turma", doc.turma) %}
+Local: {{ t.local }}
+Dia/Hora: {{ t.dia }} às {{ t.hora }}</pre>
+            <p class="text-muted small mb-1">${__('Loop over a child table of a linked doc:')}</p>
+            <pre class="small mb-2 p-2 bg-white border rounded">{% set t = frappe.get_doc("Turma", doc.turma) %}
+{% for c in t.catequistas %}
+- {{ c.nome }}
+{% endfor %}</pre>
+            <p class="text-muted small mb-1">${__('Conditional blocks:')}</p>
+            <pre class="small mb-2 p-2 bg-white border rounded">{% if doc.observacoes %}
+Obs: {{ doc.observacoes }}
+{% endif %}</pre>
             <p class="text-muted small mb-1">${__('WhatsApp formatting:')}</p>
             <ul class="small mb-0">
                 <li><code>*bold*</code> | <code>_italic_</code> | <code>~strikethrough~</code></li>
