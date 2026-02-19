@@ -27,8 +27,27 @@ class WhatsAppNotificationRule(Document):
             frappe.throw(_("Document Type '{}' does not exist").format(self.document_type))
     
     def validate_phone_field(self):
-        """Validate phone field exists in DocType"""
-        if self.phone_field and self.document_type:
+        """Validate phone field exists in DocType or child table"""
+        if self.use_child_table and self.document_type:
+            if self.child_table:
+                meta = frappe.get_meta(self.document_type)
+                child_field = meta.get_field(self.child_table)
+                if not child_field or child_field.fieldtype != "Table":
+                    frappe.throw(
+                        _("'{}' is not a valid Table field in {}").format(
+                            self.child_table, self.document_type
+                        )
+                    )
+                if self.child_phone_field and child_field.options:
+                    child_meta = frappe.get_meta(child_field.options)
+                    if not child_meta.has_field(self.child_phone_field):
+                        frappe.msgprint(
+                            _("Warning: Field '{}' not found in child table '{}'").format(
+                                self.child_phone_field, child_field.options
+                            ),
+                            indicator="orange"
+                        )
+        elif self.phone_field and self.document_type:
             meta = frappe.get_meta(self.document_type)
             if not meta.has_field(self.phone_field):
                 frappe.msgprint(
@@ -40,17 +59,18 @@ class WhatsAppNotificationRule(Document):
     
     def validate_template(self):
         """Test template syntax"""
+        dummy_row = frappe._dict({"name": "TEST", "idx": 1})
         if self.message_template:
             try:
-                # Test render with dummy data
-                test_context = {"doc": frappe._dict({"name": "TEST"}), "frappe": frappe}
+                # Test render with dummy data (include row for child table templates)
+                test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
                 frappe.render_template(self.message_template, test_context)
             except Exception as e:
                 frappe.throw(_("Invalid message template: {}").format(str(e)))
-        
+
         if self.owner_message_template:
             try:
-                test_context = {"doc": frappe._dict({"name": "TEST"}), "frappe": frappe}
+                test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
                 frappe.render_template(self.owner_message_template, test_context)
             except Exception as e:
                 frappe.throw(_("Invalid owner message template: {}").format(str(e)))
@@ -207,15 +227,34 @@ class WhatsAppNotificationRule(Document):
             doc: The source document
 
         Returns:
-            list: List of dicts with type ('phone' or 'group') and value
+            list: List of dicts with type ('phone' or 'group') and value.
+                  Child table recipients also include 'row' key.
         """
         recipients = []
 
-        # Get from document field
-        if self.recipient_type in ("Field Value", "Both", "Phone and Group") and self.phone_field:
-            phone = get_nested_value(doc, self.phone_field)
-            if phone:
-                recipients.append({"type": "phone", "value": str(phone)})
+        # Child table path
+        if self.use_child_table and self.child_table and self.child_phone_field:
+            if self.recipient_type in ("Field Value", "Both", "Phone and Group"):
+                child_rows = getattr(doc, self.child_table, []) or []
+
+                # Filter to new/changed rows if requested
+                if self.only_changed_rows and self.event in ("On Update", "On Change"):
+                    child_rows = self._filter_changed_rows(doc, child_rows)
+
+                for row in child_rows:
+                    phone = getattr(row, self.child_phone_field, None)
+                    if phone:
+                        recipients.append({
+                            "type": "phone",
+                            "value": str(phone),
+                            "row": row
+                        })
+        else:
+            # Standard path: get from document field
+            if self.recipient_type in ("Field Value", "Both", "Phone and Group") and self.phone_field:
+                phone = get_nested_value(doc, self.phone_field)
+                if phone:
+                    recipients.append({"type": "phone", "value": str(phone)})
 
         # Get fixed recipients
         if self.recipient_type in ("Fixed Number", "Both") and self.fixed_recipients:
@@ -238,22 +277,60 @@ class WhatsAppNotificationRule(Document):
                 unique_recipients.append(r)
 
         return unique_recipients
+
+    def _filter_changed_rows(self, doc, child_rows):
+        """
+        Filter child table rows to only new or modified ones.
+
+        Compares with doc.get_doc_before_save() to find rows that were
+        added or whose fields changed.
+
+        Args:
+            doc: The current document
+            child_rows: List of child table rows
+
+        Returns:
+            list: Filtered rows (only new/changed)
+        """
+        previous = doc.get_doc_before_save()
+        if not previous:
+            # No previous version (e.g., after_insert) — return all
+            return child_rows
+
+        prev_rows = getattr(previous, self.child_table, []) or []
+        prev_by_name = {r.name: r for r in prev_rows}
+
+        changed = []
+        for row in child_rows:
+            if row.name not in prev_by_name:
+                # New row
+                changed.append(row)
+            else:
+                # Check if any field changed
+                prev_row = prev_by_name[row.name]
+                if row.modified != prev_row.modified:
+                    changed.append(row)
+
+        return changed
     
-    def render_message(self, doc, for_owner=False):
+    def render_message(self, doc, for_owner=False, row=None):
         """
         Render the message template with document context
-        
+
         Args:
             doc: The source document
             for_owner: If True, use owner template
-        
+            row: Optional child table row for per-row rendering
+
         Returns:
             str: Rendered message
         """
         template = self.owner_message_template if for_owner and self.owner_message_template else self.message_template
-        
+
         try:
             context = get_template_context(doc)
+            if row is not None:
+                context["row"] = row
             return frappe.render_template(template, context)
         except Exception as e:
             frappe.log_error(
@@ -443,12 +520,11 @@ def preview_message(rule_name, docname):
         docname: The document to use for preview
 
     Returns:
-        dict: Preview data including rendered message
+        dict: Preview data including rendered message(s)
     """
     rule = frappe.get_doc("WhatsApp Notification Rule", rule_name)
     doc = frappe.get_doc(rule.document_type, docname)
 
-    message = rule.render_message(doc)
     recipients = rule.get_recipients(doc)
 
     # Format recipients for display
@@ -456,18 +532,92 @@ def preview_message(rule_name, docname):
     for r in recipients:
         if isinstance(r, dict):
             if r["type"] == "group":
-                # Show group name if available
                 group_name = rule.group_name or r["value"]
                 formatted_recipients.append("{} (Group)".format(group_name))
             else:
                 formatted_recipients.append(r["value"])
         else:
-            # Legacy format (string)
             formatted_recipients.append(r)
 
+    # Child table: render per-row previews
+    if rule.use_child_table and rule.child_table:
+        row_previews = []
+        for r in recipients[:5]:  # Max 5 previews
+            row = r.get("row") if isinstance(r, dict) else None
+            msg = rule.render_message(doc, row=row)
+            row_previews.append({
+                "phone": r.get("value", "") if isinstance(r, dict) else r,
+                "message": msg
+            })
+        return {
+            "message": row_previews[0]["message"] if row_previews else rule.render_message(doc),
+            "recipients": formatted_recipients,
+            "row_previews": row_previews,
+            "doctype": rule.document_type,
+            "docname": docname
+        }
+
+    message = rule.render_message(doc)
     return {
         "message": message,
         "recipients": formatted_recipients,
         "doctype": rule.document_type,
         "docname": docname
     }
+
+
+@frappe.whitelist()
+def get_child_tables(doctype):
+    """
+    Get Table-type fields from a DocType (for child table selection)
+
+    Args:
+        doctype: The DocType name
+
+    Returns:
+        list: List of dicts with fieldname, label, and options (child DocType)
+    """
+    if not doctype:
+        return []
+
+    meta = frappe.get_meta(doctype)
+    tables = []
+    for df in meta.fields:
+        if df.fieldtype == "Table":
+            tables.append({
+                "fieldname": df.fieldname,
+                "label": df.label or df.fieldname,
+                "options": df.options  # The child DocType name
+            })
+    return tables
+
+
+@frappe.whitelist()
+def get_child_table_fields(doctype, child_table_field):
+    """
+    Get Data/Phone/Int fields from a child table's DocType
+
+    Args:
+        doctype: The parent DocType name
+        child_table_field: The fieldname of the Table field
+
+    Returns:
+        list: List of dicts with fieldname and label
+    """
+    if not doctype or not child_table_field:
+        return []
+
+    meta = frappe.get_meta(doctype)
+    table_field = meta.get_field(child_table_field)
+    if not table_field or not table_field.options:
+        return []
+
+    child_meta = frappe.get_meta(table_field.options)
+    fields = []
+    for df in child_meta.fields:
+        if df.fieldtype in ("Data", "Phone", "Int", "Link"):
+            fields.append({
+                "fieldname": df.fieldname,
+                "label": "{} ({})".format(df.label or df.fieldname, df.fieldtype)
+            })
+    return fields

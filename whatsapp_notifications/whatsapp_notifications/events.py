@@ -170,8 +170,6 @@ def process_rule(doc, rule, settings):
         rule: WhatsApp Notification Rule document
         settings: Evolution API Settings dict
     """
-    from whatsapp_notifications.whatsapp_notifications.utils import format_phone_number
-
     # Get message_type early for debug logging
     message_type = getattr(rule, 'message_type', 'Text Only') or 'Text Only'
 
@@ -204,17 +202,6 @@ def process_rule(doc, rule, settings):
             )
         return
 
-    # Render message
-    message = rule.render_message(doc)
-
-    # For text-only, message is required
-    if message_type == 'Text Only' and not message:
-        frappe.log_error(
-            "Empty message for rule {} on {}".format(rule.name, doc.name),
-            "WhatsApp Template Error"
-        )
-        return
-
     # Calculate delay if needed
     scheduled_time = None
     if rule.delay_seconds and rule.delay_seconds > 0:
@@ -223,49 +210,59 @@ def process_rule(doc, rule, settings):
             seconds=rule.delay_seconds
         )
 
-    # Send to all recipients
-    for recipient in recipients:
-        try:
-            # Handle both new format (dict) and legacy format (string)
-            if isinstance(recipient, dict):
-                phone_or_group = recipient["value"]
-                recipient_type = recipient["type"]
-            else:
-                # Legacy format (string)
-                phone_or_group = recipient
-                recipient_type = "phone"
+    # Determine if this is a child table rule (per-row rendering)
+    is_child_table = getattr(rule, 'use_child_table', 0) and rule.child_table
 
-            # Get recipient name if available (only for phone recipients)
-            if recipient_type == "phone":
-                recipient_name = get_recipient_name(doc, rule.phone_field)
-            else:
-                # For groups, use the group name from the rule
-                recipient_name = rule.group_name or "Group"
+    if is_child_table:
+        # Per-row rendering: each recipient has a .row, render message individually
+        for recipient in recipients:
+            try:
+                row = recipient.get("row") if isinstance(recipient, dict) else None
+                message = rule.render_message(doc, row=row)
 
-            send_notification(
-                phone=phone_or_group,
-                message=message,
-                reference_doctype=doc.doctype,
-                reference_name=doc.name,
-                notification_rule=rule.name,
-                recipient_name=recipient_name,
-                scheduled_time=scheduled_time,
-                settings=settings,
-                message_type=message_type,
-                print_format=getattr(rule, 'print_format', None),
-                fixed_file_url=getattr(rule, 'fixed_file', None)
-            )
-        except Exception as e:
+                if message_type == 'Text Only' and not message:
+                    continue
+
+                recipient_name = _get_row_recipient_name(row) if row else None
+
+                _send_to_recipient(
+                    recipient, message, doc, rule, scheduled_time,
+                    settings, message_type, recipient_name
+                )
+            except Exception as e:
+                phone_or_group = recipient.get("value", "") if isinstance(recipient, dict) else recipient
+                frappe.log_error(
+                    "WhatsApp Send Error ({} to {}): {}".format(rule.name, phone_or_group, str(e)),
+                    "WhatsApp Send Error"
+                )
+    else:
+        # Standard path: render message once, send to all recipients
+        message = rule.render_message(doc)
+
+        if message_type == 'Text Only' and not message:
             frappe.log_error(
-                "WhatsApp Send Error ({} to {}): {}".format(rule.name, phone_or_group, str(e)),
-                "WhatsApp Send Error"
+                "Empty message for rule {} on {}".format(rule.name, doc.name),
+                "WhatsApp Template Error"
             )
+            return
+
+        for recipient in recipients:
+            try:
+                _send_to_recipient(
+                    recipient, message, doc, rule, scheduled_time,
+                    settings, message_type
+                )
+            except Exception as e:
+                phone_or_group = recipient.get("value", "") if isinstance(recipient, dict) else recipient
+                frappe.log_error(
+                    "WhatsApp Send Error ({} to {}): {}".format(rule.name, phone_or_group, str(e)),
+                    "WhatsApp Send Error"
+                )
 
     # Send to owner/default notification numbers if configured
     if rule.notify_owner and settings.get("owner_number"):
         owner_message = rule.render_message(doc, for_owner=True)
 
-        # Support multiple numbers (one per line)
         owner_numbers = settings.get("owner_number", "").strip().split("\n")
         for owner_num in owner_numbers:
             owner_num = owner_num.strip()
@@ -290,6 +287,70 @@ def process_rule(doc, rule, settings):
                     "WhatsApp Owner Send Error ({} to {}): {}".format(rule.name, owner_num, str(e)),
                     "WhatsApp Send Error"
                 )
+
+
+def _send_to_recipient(recipient, message, doc, rule, scheduled_time,
+                       settings, message_type, recipient_name=None):
+    """
+    Send a notification to a single recipient.
+
+    Args:
+        recipient: Dict with type/value (or legacy string)
+        message: Rendered message text
+        doc: The source document
+        rule: The notification rule
+        scheduled_time: When to send (None = immediate)
+        settings: API settings dict
+        message_type: Text Only, Attached File, etc.
+        recipient_name: Optional override for recipient display name
+    """
+    if isinstance(recipient, dict):
+        phone_or_group = recipient["value"]
+        recipient_type = recipient["type"]
+    else:
+        phone_or_group = recipient
+        recipient_type = "phone"
+
+    if recipient_name is None:
+        if recipient_type == "phone":
+            recipient_name = get_recipient_name(doc, rule.phone_field)
+        else:
+            recipient_name = rule.group_name or "Group"
+
+    send_notification(
+        phone=phone_or_group,
+        message=message,
+        reference_doctype=doc.doctype,
+        reference_name=doc.name,
+        notification_rule=rule.name,
+        recipient_name=recipient_name,
+        scheduled_time=scheduled_time,
+        settings=settings,
+        message_type=message_type,
+        print_format=getattr(rule, 'print_format', None),
+        fixed_file_url=getattr(rule, 'fixed_file', None)
+    )
+
+
+def _get_row_recipient_name(row):
+    """
+    Try to get a display name from a child table row.
+
+    Args:
+        row: Child table row object
+
+    Returns:
+        str: Name or None
+    """
+    name_fields = [
+        "nome_completo", "nome", "full_name", "name1",
+        "first_name", "customer_name", "contact_name"
+    ]
+    for field in name_fields:
+        value = getattr(row, field, None)
+        if value:
+            return str(value)
+    return None
 
 
 def is_group_id(recipient):

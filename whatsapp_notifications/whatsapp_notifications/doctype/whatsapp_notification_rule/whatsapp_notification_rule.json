@@ -16,6 +16,10 @@
         "value_changed",
         "section_recipient",
         "phone_field",
+        "use_child_table",
+        "child_table",
+        "child_phone_field",
+        "only_changed_rows",
         "recipient_type",
         "column_break_recipient",
         "fixed_recipients",
@@ -107,6 +111,36 @@
             "fieldtype": "Select",
             "label": "Phone Field",
             "description": "Document field containing recipient phone number (e.g., mobile_no, phone, contact_mobile)"
+        },
+        {
+            "default": "0",
+            "fieldname": "use_child_table",
+            "fieldtype": "Check",
+            "label": "Send to Child Table Rows",
+            "description": "Send individual messages to each row in a child table",
+            "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type)"
+        },
+        {
+            "fieldname": "child_table",
+            "fieldtype": "Select",
+            "label": "Child Table",
+            "description": "Select the child table containing recipient rows",
+            "depends_on": "eval:doc.use_child_table==1"
+        },
+        {
+            "fieldname": "child_phone_field",
+            "fieldtype": "Select",
+            "label": "Child Table Phone Field",
+            "description": "Phone field within each child table row",
+            "depends_on": "eval:doc.use_child_table==1 && doc.child_table"
+        },
+        {
+            "default": "0",
+            "fieldname": "only_changed_rows",
+            "fieldtype": "Check",
+            "label": "Only New/Changed Rows",
+            "description": "Only send to rows that were added or modified (not all rows)",
+            "depends_on": "eval:doc.use_child_table==1 && (doc.event=='On Update' || doc.event=='On Change')"
         },
         {
             "fieldname": "recipient_type",

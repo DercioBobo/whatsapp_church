@@ -32,6 +32,12 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         // Setup field selectors on refresh
         if (frm.doc.document_type) {
             load_field_options(frm);
+            if (frm.doc.use_child_table) {
+                load_child_table_options(frm);
+                if (frm.doc.child_table) {
+                    load_child_phone_field_options(frm);
+                }
+            }
         }
     },
 
@@ -39,10 +45,16 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         // Clear field suggestions when doctype changes
         frm.set_value('phone_field', '');
         frm.set_value('value_changed', '');
+        frm.set_value('child_table', '');
+        frm.set_value('child_phone_field', '');
 
         if (frm.doc.document_type) {
             // Load field options
             load_field_options(frm);
+            // Load child table options if child table mode is on
+            if (frm.doc.use_child_table) {
+                load_child_table_options(frm);
+            }
         }
     },
 
@@ -74,6 +86,24 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
 
     select_group_button: function (frm) {
         show_group_selection_dialog(frm);
+    },
+
+    use_child_table: function (frm) {
+        if (frm.doc.use_child_table && frm.doc.document_type) {
+            load_child_table_options(frm);
+        } else {
+            frm.set_value('child_table', '');
+            frm.set_value('child_phone_field', '');
+        }
+        // Refresh template help to show row variables
+        setup_template_help(frm);
+    },
+
+    child_table: function (frm) {
+        frm.set_value('child_phone_field', '');
+        if (frm.doc.child_table && frm.doc.document_type) {
+            load_child_phone_field_options(frm);
+        }
     }
 });
 
@@ -113,11 +143,70 @@ function set_field_options(frm, fieldname, options) {
     }
 }
 
+function load_child_table_options(frm) {
+    if (!frm.doc.document_type) return;
+
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_tables',
+        args: { doctype: frm.doc.document_type },
+        callback: function (r) {
+            if (r.message) {
+                let options = [''].concat(
+                    r.message.map(t => t.fieldname)
+                );
+                let field = frm.get_field('child_table');
+                if (field) {
+                    field.df.options = options.join('\n');
+                    field.refresh();
+                }
+            }
+        }
+    });
+}
+
+function load_child_phone_field_options(frm) {
+    if (!frm.doc.document_type || !frm.doc.child_table) return;
+
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_table_fields',
+        args: {
+            doctype: frm.doc.document_type,
+            child_table_field: frm.doc.child_table
+        },
+        callback: function (r) {
+            if (r.message) {
+                let options = [''].concat(
+                    r.message.map(f => f.fieldname)
+                );
+                let field = frm.get_field('child_phone_field');
+                if (field) {
+                    field.df.options = options.join('\n');
+                    field.refresh();
+                }
+            }
+        }
+    });
+}
+
 function setup_template_help(frm) {
     if (!frm.doc.document_type) return;
 
     // Remove any existing help text first to prevent duplication
     frm.fields_dict.message_template.$wrapper.siblings('.template-help').remove();
+
+    // Build child table help section
+    let child_table_help = '';
+    if (frm.doc.use_child_table) {
+        child_table_help = `
+            <p class="text-muted small mb-2 mt-2"><strong>${__('Child Table Row Variables:')}</strong></p>
+            <ul class="small mb-2">
+                <li><code>{{ row.fieldname }}</code> - ${__('Any field from the child table row')}</li>
+                <li><code>{{ row.idx }}</code> - ${__('Row number')}</li>
+                <li><code>{{ row.nome }}</code> - ${__('Example: row name field')}</li>
+                <li><code>{{ row.contacto }}</code> - ${__('Example: row phone field')}</li>
+            </ul>
+        `;
+    }
 
     // Add help text showing available fields
     let help_html = `
@@ -130,6 +219,7 @@ function setup_template_help(frm) {
                 <li><code>{{ format_date(doc.date_field) }}</code> - ${__('Formatted date')}</li>
                 <li><code>{{ format_currency(doc.amount, "MZN") }}</code> - ${__('Formatted currency')}</li>
             </ul>
+            ${child_table_help}
             <p class="text-muted small mb-1">${__('WhatsApp formatting:')}</p>
             <ul class="small mb-0">
                 <li><code>*bold*</code> | <code>_italic_</code> | <code>~strikethrough~</code></li>
@@ -201,20 +291,51 @@ function render_preview(frm, docname, dialog) {
         },
         callback: function (r) {
             if (r.message) {
-                let html = `
-                    <div class="preview-container">
+                let html = '';
+
+                // Per-row previews for child table rules
+                if (r.message.row_previews && r.message.row_previews.length > 0) {
+                    let rows_html = r.message.row_previews.map((rp, i) => `
                         <div class="mb-3">
-                            <label class="text-muted">${__('Recipients')}:</label>
-                            <div class="font-weight-bold">${r.message.recipients.join(', ') || __('No recipients found')}</div>
-                        </div>
-                        <div>
-                            <label class="text-muted">${__('Message')}:</label>
+                            <label class="text-muted">${__('Row')} ${i + 1} — ${frappe.utils.escape_html(rp.phone)}:</label>
                             <div class="whatsapp-preview p-3 rounded" style="background: #DCF8C6; white-space: pre-wrap; font-family: system-ui, -apple-system, sans-serif;">
-                                ${frappe.utils.escape_html(r.message.message || __('Empty message'))}
+                                ${frappe.utils.escape_html(rp.message || __('Empty message'))}
                             </div>
                         </div>
-                    </div>
-                `;
+                    `).join('');
+
+                    let total_note = r.message.recipients.length > 5
+                        ? `<p class="text-muted small">${__('Showing first 5 of')} ${r.message.recipients.length} ${__('recipients')}</p>`
+                        : '';
+
+                    html = `
+                        <div class="preview-container">
+                            <div class="mb-3">
+                                <label class="text-muted">${__('Recipients')} (${r.message.recipients.length}):</label>
+                                <div class="font-weight-bold">${r.message.recipients.join(', ') || __('No recipients found')}</div>
+                            </div>
+                            ${total_note}
+                            ${rows_html}
+                        </div>
+                    `;
+                } else {
+                    // Standard single-message preview
+                    html = `
+                        <div class="preview-container">
+                            <div class="mb-3">
+                                <label class="text-muted">${__('Recipients')}:</label>
+                                <div class="font-weight-bold">${r.message.recipients.join(', ') || __('No recipients found')}</div>
+                            </div>
+                            <div>
+                                <label class="text-muted">${__('Message')}:</label>
+                                <div class="whatsapp-preview p-3 rounded" style="background: #DCF8C6; white-space: pre-wrap; font-family: system-ui, -apple-system, sans-serif;">
+                                    ${frappe.utils.escape_html(r.message.message || __('Empty message'))}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 dialog.fields_dict.preview_html.$wrapper.html(html);
             }
         }
