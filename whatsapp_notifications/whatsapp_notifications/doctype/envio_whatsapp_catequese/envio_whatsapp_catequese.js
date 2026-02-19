@@ -446,6 +446,7 @@ function show_multiselect_dialog(frm, doctype_type) {
     };
     let dt = doctype_map[doctype_type];
     let is_single_select = doctype_type === 'Preparacao do Sacramento';
+    let has_padrinhos = doctype_type === 'Catecumeno' || doctype_type === 'Preparacao do Sacramento';
     let title = is_single_select
         ? 'Seleccionar ' + doctype_type
         : 'Seleccionar ' + doctype_type + 's';
@@ -476,20 +477,30 @@ function show_multiselect_dialog(frm, doctype_type) {
 
             let selected = new Set();
 
+            let dialog_fields = [];
+            if (has_padrinhos) {
+                dialog_fields.push({
+                    fieldname: 'incluir',
+                    fieldtype: 'Select',
+                    label: 'Enviar para',
+                    options: 'Contacto\nPadrinhos\nAmbos',
+                    default: 'Contacto'
+                });
+            }
+            dialog_fields.push({
+                fieldname: 'search',
+                fieldtype: 'Data',
+                placeholder: 'Pesquisar...'
+            });
+            dialog_fields.push({
+                fieldname: 'list_html',
+                fieldtype: 'HTML'
+            });
+
             let dialog = new frappe.ui.Dialog({
                 title: title,
                 size: 'large',
-                fields: [
-                    {
-                        fieldname: 'search',
-                        fieldtype: 'Data',
-                        placeholder: 'Pesquisar...'
-                    },
-                    {
-                        fieldname: 'list_html',
-                        fieldtype: 'HTML'
-                    }
-                ],
+                fields: dialog_fields,
                 primary_action_label: 'Adicionar Seleccionados',
                 primary_action: function () {
                     if (selected.size === 0 && !is_single_select) {
@@ -499,7 +510,8 @@ function show_multiselect_dialog(frm, doctype_type) {
                     dialog.hide();
 
                     let names = Array.from(selected);
-                    add_from_selection(frm, doctype_type, names);
+                    let incluir = has_padrinhos ? (dialog.get_value('incluir') || 'Contacto').toLowerCase() : 'contacto';
+                    add_from_selection(frm, doctype_type, names, incluir);
                 }
             });
 
@@ -808,15 +820,19 @@ function show_group_dialog(frm) {
 // ============================================================
 // Single server call to add all selected records at once
 // ============================================================
-function call_adicionar(frm, tipo, names) {
+function call_adicionar(frm, tipo, names, incluir) {
     let do_call = function () {
+        let args = {
+            tipo: tipo,
+            nomes: JSON.stringify(names)
+        };
+        if (incluir) {
+            args.incluir = incluir;
+        }
         frappe.call({
             method: 'adicionar_multiplos',
             doc: frm.doc,
-            args: {
-                tipo: tipo,
-                nomes: JSON.stringify(names)
-            },
+            args: args,
             freeze: true,
             freeze_message: 'Adicionando destinat\u00e1rios...',
             callback: function (r) {
@@ -842,9 +858,9 @@ function call_adicionar(frm, tipo, names) {
     }
 }
 
-function add_from_selection(frm, tipo, names) {
+function add_from_selection(frm, tipo, names, incluir) {
     if (!names.length) return;
-    call_adicionar(frm, tipo, names);
+    call_adicionar(frm, tipo, names, incluir);
 }
 
 // ============================================================

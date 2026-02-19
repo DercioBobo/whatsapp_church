@@ -26,22 +26,42 @@ def parse_contacto(raw):
     return numbers
 
 
-def _resolve_single_doc(doctype, name, origem):
-    """Resolve contacts from a single Catecumeno or Catequista record."""
+def _resolve_single_doc(doctype, name, origem, incluir="contacto"):
+    """Resolve contacts from a single Catecumeno or Catequista record.
+
+    Args:
+        incluir: 'contacto', 'padrinhos', or 'ambos'
+    """
     try:
         doc = frappe.get_doc(doctype, name)
     except frappe.DoesNotExistError:
         return []
-    raw_contacto = getattr(doc, "contacto", None)
-    if not raw_contacto:
-        return []
+
     nome = getattr(doc, "nome_completo", None) or getattr(doc, "nome", None) or name
-    return [{
-        "nome": nome,
-        "contacto": num,
-        "origem": origem,
-        "referencia": name
-    } for num in parse_contacto(raw_contacto)]
+    recipients = []
+
+    if incluir in ("contacto", "ambos"):
+        raw_contacto = getattr(doc, "contacto", None)
+        for num in parse_contacto(raw_contacto):
+            recipients.append({
+                "nome": nome,
+                "contacto": num,
+                "origem": origem,
+                "referencia": name
+            })
+
+    if incluir in ("padrinhos", "ambos"):
+        raw_padrinhos = getattr(doc, "contacto_padrinhos", None)
+        nome_padrinho = getattr(doc, "padrinhos", None) or ""
+        for num in parse_contacto(raw_padrinhos):
+            recipients.append({
+                "nome": nome_padrinho or "Padrinho de " + nome,
+                "contacto": num,
+                "origem": origem + " (Padrinho)",
+                "referencia": name
+            })
+
+    return recipients
 
 
 def _resolve_turma_doc(name):
@@ -74,8 +94,12 @@ def _resolve_turma_doc(name):
     return recipients
 
 
-def _resolve_preparacao_doc(name):
-    """Resolve contacts from all candidates in a Preparacao do Sacramento."""
+def _resolve_preparacao_doc(name, incluir="contacto"):
+    """Resolve contacts from all candidates in a Preparacao do Sacramento.
+
+    Args:
+        incluir: 'contacto', 'padrinhos', or 'ambos'
+    """
     try:
         doc = frappe.get_doc("Preparacao do Sacramento", name)
     except frappe.DoesNotExistError:
@@ -85,22 +109,40 @@ def _resolve_preparacao_doc(name):
     for row in child_table:
         raw_contacto = getattr(row, "contacto", None)
         nome = getattr(row, "nome_completo", None) or getattr(row, "nome", None) or ""
-        if not raw_contacto:
+        raw_padrinhos = getattr(row, "contacto_padrinhos", None)
+
+        # Fallback to linked Catecumeno if row has no direct contacts
+        if not raw_contacto or not nome:
             catecumeno_link = getattr(row, "catecumeno", None)
             if catecumeno_link:
                 try:
                     cat_doc = frappe.get_doc("Catecumeno", catecumeno_link)
-                    raw_contacto = getattr(cat_doc, "contacto", None)
+                    if not raw_contacto:
+                        raw_contacto = getattr(cat_doc, "contacto", None)
+                    if not raw_padrinhos:
+                        raw_padrinhos = getattr(cat_doc, "contacto_padrinhos", None)
                     nome = nome or getattr(cat_doc, "nome_completo", None) or getattr(cat_doc, "nome", None) or catecumeno_link
                 except frappe.DoesNotExistError:
                     pass
-        for num in parse_contacto(raw_contacto):
-            recipients.append({
-                "nome": nome,
-                "contacto": num,
-                "origem": "Preparacao do Sacramento",
-                "referencia": name
-            })
+
+        if incluir in ("contacto", "ambos"):
+            for num in parse_contacto(raw_contacto):
+                recipients.append({
+                    "nome": nome,
+                    "contacto": num,
+                    "origem": "Preparacao do Sacramento",
+                    "referencia": name
+                })
+
+        if incluir in ("padrinhos", "ambos"):
+            for num in parse_contacto(raw_padrinhos):
+                recipients.append({
+                    "nome": "Padrinho de " + nome if nome else "Padrinho",
+                    "contacto": num,
+                    "origem": "Prep. Sacramento (Padrinho)",
+                    "referencia": name
+                })
+
     return recipients
 
 
@@ -120,12 +162,13 @@ class EnvioWhatsAppCatequese(Document):
         return {"success": True}
 
     @frappe.whitelist()
-    def adicionar_multiplos(self, tipo, nomes):
+    def adicionar_multiplos(self, tipo, nomes, incluir="contacto"):
         """Add recipients from multiple records in a single call.
 
         Args:
-            tipo: 'Catecumeno', 'Catequista', 'Turma', 'Preparacao do Sacramento', or 'Manual'
+            tipo: 'Catecumeno', 'Catequista', 'Turma', 'Preparacao do Sacramento', 'Grupo', or 'Manual'
             nomes: JSON list of record names, or raw text for Manual
+            incluir: 'contacto', 'padrinhos', or 'ambos' (for Catecumeno and Preparacao)
         """
         if self.status != "Rascunho":
             frappe.throw(_("Só é possível adicionar destinatários quando o status é Rascunho"))
@@ -155,7 +198,7 @@ class EnvioWhatsAppCatequese(Document):
                     })
         elif tipo == "Catecumeno":
             for name in nomes:
-                resolved = _resolve_single_doc("Catecumeno", name, "Catecumeno")
+                resolved = _resolve_single_doc("Catecumeno", name, "Catecumeno", incluir=incluir)
                 if resolved:
                     all_recipients.extend(resolved)
                 else:
@@ -176,7 +219,7 @@ class EnvioWhatsAppCatequese(Document):
                     skipped += 1
         elif tipo == "Preparacao do Sacramento":
             for name in nomes:
-                resolved = _resolve_preparacao_doc(name)
+                resolved = _resolve_preparacao_doc(name, incluir=incluir)
                 if resolved:
                     all_recipients.extend(resolved)
                 else:
