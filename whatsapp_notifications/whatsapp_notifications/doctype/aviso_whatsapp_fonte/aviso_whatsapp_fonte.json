@@ -1,0 +1,153 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-02-20 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "tipo_fonte",
+        "descricao",
+        "column_break_1",
+        "filtro_status",
+        "nome_registo",
+        "incluir_padrinhos",
+        "section_doctype",
+        "doctype_fonte",
+        "campo_contacto",
+        "usar_child_table",
+        "child_table_field",
+        "campo_contacto_child",
+        "filtro_campo",
+        "filtro_valor",
+        "section_manual",
+        "numeros",
+        "section_grupo",
+        "grupo_id",
+        "grupo_nome"
+    ],
+    "fields": [
+        {
+            "fieldname": "tipo_fonte",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Tipo de Fonte",
+            "options": "Catecumenos\nCatequistas\nTurma\nPreparacao Sacramento\nDocType\nNumeros Manuais\nGrupo WhatsApp",
+            "reqd": 1
+        },
+        {
+            "fieldname": "descricao",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Descri\u00e7\u00e3o",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "filtro_status",
+            "fieldtype": "Data",
+            "label": "Filtro Status",
+            "description": "Ex: Activo, Inactivo (vazio = todos)"
+        },
+        {
+            "fieldname": "nome_registo",
+            "fieldtype": "Data",
+            "label": "Nome do Registo",
+            "description": "Registo espec\u00edfico (vazio = todos)"
+        },
+        {
+            "fieldname": "incluir_padrinhos",
+            "fieldtype": "Check",
+            "label": "Incluir Padrinhos"
+        },
+        {
+            "fieldname": "section_doctype",
+            "fieldtype": "Section Break",
+            "label": "Configura\u00e7\u00e3o DocType",
+            "depends_on": "eval:doc.tipo_fonte=='DocType'",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "doctype_fonte",
+            "fieldtype": "Data",
+            "label": "DocType"
+        },
+        {
+            "fieldname": "campo_contacto",
+            "fieldtype": "Data",
+            "label": "Campo Contacto"
+        },
+        {
+            "fieldname": "usar_child_table",
+            "fieldtype": "Check",
+            "label": "Contactos em Child Table"
+        },
+        {
+            "fieldname": "child_table_field",
+            "fieldtype": "Data",
+            "label": "Campo da Child Table",
+            "depends_on": "eval:doc.usar_child_table==1"
+        },
+        {
+            "fieldname": "campo_contacto_child",
+            "fieldtype": "Data",
+            "label": "Campo Contacto (Child)",
+            "depends_on": "eval:doc.usar_child_table==1"
+        },
+        {
+            "fieldname": "filtro_campo",
+            "fieldtype": "Data",
+            "label": "Campo de Filtro"
+        },
+        {
+            "fieldname": "filtro_valor",
+            "fieldtype": "Data",
+            "label": "Valor de Filtro"
+        },
+        {
+            "fieldname": "section_manual",
+            "fieldtype": "Section Break",
+            "label": "N\u00fameros Manuais",
+            "depends_on": "eval:doc.tipo_fonte=='Numeros Manuais'",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "numeros",
+            "fieldtype": "Small Text",
+            "label": "N\u00fameros",
+            "description": "Um n\u00famero por linha ou separados por v\u00edrgula"
+        },
+        {
+            "fieldname": "section_grupo",
+            "fieldtype": "Section Break",
+            "label": "Grupo WhatsApp",
+            "depends_on": "eval:doc.tipo_fonte=='Grupo WhatsApp'",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "grupo_id",
+            "fieldtype": "Data",
+            "label": "ID do Grupo (JID)"
+        },
+        {
+            "fieldname": "grupo_nome",
+            "fieldtype": "Data",
+            "label": "Nome do Grupo"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-02-20 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Aviso WhatsApp Fonte",
+    "owner": "Administrator",
+    "permissions": [],
+    "quick_entry": 0,
+    "sort_field": "creation",
+    "sort_order": "ASC",
+    "track_changes": 0
+}

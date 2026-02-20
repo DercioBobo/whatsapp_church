@@ -1,0 +1,77 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-02-20 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "data_envio_real",
+        "disparado_por",
+        "column_break_1",
+        "total",
+        "enviados",
+        "falhados",
+        "nota"
+    ],
+    "fields": [
+        {
+            "fieldname": "data_envio_real",
+            "fieldtype": "Datetime",
+            "in_list_view": 1,
+            "label": "Data de Envio",
+            "read_only": 1
+        },
+        {
+            "fieldname": "disparado_por",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Disparado Por",
+            "options": "Manual\nAgendado",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "total",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Total",
+            "read_only": 1
+        },
+        {
+            "fieldname": "enviados",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Enviados",
+            "read_only": 1
+        },
+        {
+            "fieldname": "falhados",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Falhados",
+            "read_only": 1
+        },
+        {
+            "fieldname": "nota",
+            "fieldtype": "Small Text",
+            "label": "Nota",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-02-20 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Aviso Historico",
+    "owner": "Administrator",
+    "permissions": [],
+    "quick_entry": 0,
+    "sort_field": "creation",
+    "sort_order": "DESC",
+    "track_changes": 0
+}

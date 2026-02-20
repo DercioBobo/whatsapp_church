@@ -128,6 +128,17 @@
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Aviso WhatsApp",
+   "link_count": 0,
+   "link_to": "Aviso WhatsApp",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
   }
  ],
  "module": "WhatsApp Notifications",
@@ -165,6 +176,14 @@
    "format": "",
    "label": "Envio Catequese",
    "link_to": "Envio WhatsApp Catequese",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "#25D366",
+   "format": "",
+   "label": "Avisos WhatsApp",
+   "link_to": "Aviso WhatsApp",
    "stats_filter": "",
    "type": "DocType"
   }
