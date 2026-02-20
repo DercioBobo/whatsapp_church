@@ -449,6 +449,8 @@ function show_multiselect_dialog(frm, doctype_type) {
     let is_single_select = doctype_type === 'Preparacao do Sacramento';
     let has_padrinhos = doctype_type === 'Catecumeno' || doctype_type === 'Preparacao do Sacramento';
     let is_catequista = doctype_type === 'Catequista';
+    let is_turma = doctype_type === 'Turma';
+    let has_status_filter = is_catequista || is_turma;
     let title = is_single_select
         ? 'Seleccionar ' + doctype_type
         : 'Seleccionar ' + doctype_type + 's';
@@ -477,7 +479,7 @@ function show_multiselect_dialog(frm, doctype_type) {
                     default: 'Contacto'
                 });
             }
-            if (is_catequista) {
+            if (has_status_filter) {
                 dialog_fields.push({
                     fieldname: 'estado_filter',
                     fieldtype: 'Select',
@@ -515,7 +517,7 @@ function show_multiselect_dialog(frm, doctype_type) {
 
             function render_list() {
                 let filter_text = (dialog.get_value('search') || '').toLowerCase();
-                let status_filter = is_catequista ? (dialog.get_value('estado_filter') || 'Activo') : null;
+                let status_filter = has_status_filter ? (dialog.get_value('estado_filter') || 'Activo') : null;
 
                 // Build set of already-added references from current recipients
                 let existing_refs = new Set(
@@ -578,6 +580,17 @@ function show_multiselect_dialog(frm, doctype_type) {
                             ? `<div style="font-size: 11px; color: ${WA_COLORS.grey_text}; margin-top: 2px;">
                                 ${frappe.utils.escape_html(rec.info)}</div>`
                             : '';
+
+                        // Member names for Turma
+                        if (is_turma && rec.members && rec.members.length > 0) {
+                            let show = rec.members.slice(0, 6);
+                            let extra = rec.members.length - show.length;
+                            let names_str = show.map(function (m) { return frappe.utils.escape_html(m); }).join(', ');
+                            info_html += `<div style="font-size: 11px; color: ${WA_COLORS.grey_text};
+                                margin-top: 2px; white-space: normal; line-height: 1.4;">
+                                ${names_str}${extra > 0 ? ` <span style="color:${WA_COLORS.teal}; font-weight:500;">+${extra} mais</span>` : ''}
+                            </div>`;
+                        }
 
                         // Status badge for Catequista
                         let status_badge = '';
@@ -686,8 +699,8 @@ function show_multiselect_dialog(frm, doctype_type) {
                 render_list();
             });
 
-            // Estado filter binding (Catequista only)
-            if (is_catequista) {
+            // Estado filter binding (Catequista and Turma)
+            if (has_status_filter) {
                 dialog.fields_dict.estado_filter.$input.on('change', function () {
                     render_list();
                 });

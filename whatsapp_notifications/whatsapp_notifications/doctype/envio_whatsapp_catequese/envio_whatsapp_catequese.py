@@ -199,21 +199,31 @@ def get_registros_para_dialogo(doctype):
     elif doctype == "Turma":
         records = frappe.get_list(
             "Turma",
-            fields=["name"],
+            fields=["name", "status"],
             limit_page_length=0,
             order_by="name asc"
         )
-        counts = frappe.db.sql(
-            "SELECT parent, COUNT(*) as cnt FROM `tabTurma Catecumenos` GROUP BY parent",
+        # Fetch member names from child table
+        members_rows = frappe.db.sql(
+            """SELECT parent,
+               COALESCE(NULLIF(nome_completo, ''), NULLIF(nome, ''), catecumeno) AS member_name
+               FROM `tabTurma Catecumenos`
+               ORDER BY parent, idx""",
             as_dict=True
         )
-        count_map = {c.parent: c.cnt for c in counts}
+        members_map = {}
+        for m in members_rows:
+            members_map.setdefault(m.parent, [])
+            if m.member_name:
+                members_map[m.parent].append(m.member_name)
+
         return [
             {
                 "name": r.name,
                 "display": r.name,
-                "info": "{} membro(s)".format(count_map.get(r.name, 0)),
-                "estado": ""
+                "info": "{} membro(s)".format(len(members_map.get(r.name, []))),
+                "status": r.get("status") or "",
+                "members": members_map.get(r.name, [])
             }
             for r in records
         ]
@@ -235,7 +245,7 @@ def get_registros_para_dialogo(doctype):
                 "name": r.name,
                 "display": r.name,
                 "info": "{} candidato(s)".format(count_map.get(r.name, 0)),
-                "estado": ""
+                "status": ""
             }
             for r in records
         ]
