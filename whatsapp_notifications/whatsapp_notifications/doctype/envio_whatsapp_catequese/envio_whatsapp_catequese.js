@@ -437,7 +437,6 @@ function render_enviar_area(frm) {
 // Multi-select dialog for Catecumeno / Catequista / Turma
 // ============================================================
 function show_multiselect_dialog(frm, doctype_type) {
-    // Map tipo to actual DocType name
     let doctype_map = {
         'Catecumeno': 'Catecumeno',
         'Catequista': 'Catequista',
@@ -447,19 +446,14 @@ function show_multiselect_dialog(frm, doctype_type) {
     let dt = doctype_map[doctype_type];
     let is_single_select = doctype_type === 'Preparacao do Sacramento';
     let has_padrinhos = doctype_type === 'Catecumeno' || doctype_type === 'Preparacao do Sacramento';
+    let is_catequista = doctype_type === 'Catequista';
     let title = is_single_select
         ? 'Seleccionar ' + doctype_type
         : 'Seleccionar ' + doctype_type + 's';
 
-    // Fetch records - only request 'name' which is always permitted
     frappe.call({
-        method: 'frappe.client.get_list',
-        args: {
-            doctype: dt,
-            fields: ['name'],
-            limit_page_length: 0,
-            order_by: 'name asc'
-        },
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.envio_whatsapp_catequese.envio_whatsapp_catequese.get_registros_para_dialogo',
+        args: { doctype: dt },
         freeze: true,
         freeze_message: 'Carregando...',
         callback: function (r) {
@@ -468,13 +462,7 @@ function show_multiselect_dialog(frm, doctype_type) {
                 return;
             }
 
-            let records = r.message.map(function (rec) {
-                return {
-                    name: rec.name,
-                    display: rec.name
-                };
-            });
-
+            let all_records = r.message;
             let selected = new Set();
 
             let dialog_fields = [];
@@ -485,6 +473,15 @@ function show_multiselect_dialog(frm, doctype_type) {
                     label: 'Enviar para',
                     options: 'Contacto\nPadrinhos\nAmbos',
                     default: 'Contacto'
+                });
+            }
+            if (is_catequista) {
+                dialog_fields.push({
+                    fieldname: 'estado_filter',
+                    fieldtype: 'Select',
+                    label: 'Estado',
+                    options: 'Todos\nActivo\nInactivo',
+                    default: 'Activo'
                 });
             }
             dialog_fields.push({
@@ -508,25 +505,35 @@ function show_multiselect_dialog(frm, doctype_type) {
                         return;
                     }
                     dialog.hide();
-
                     let names = Array.from(selected);
                     let incluir = has_padrinhos ? (dialog.get_value('incluir') || 'Contacto').toLowerCase() : 'contacto';
                     add_from_selection(frm, doctype_type, names, incluir);
                 }
             });
 
-            function render_list(filter_text) {
-                filter_text = (filter_text || '').toLowerCase();
-                let filtered = records.filter(r =>
-                    r.display.toLowerCase().includes(filter_text) ||
-                    r.name.toLowerCase().includes(filter_text)
-                );
+            function render_list() {
+                let filter_text = (dialog.get_value('search') || '').toLowerCase();
+                let estado_filter = is_catequista ? (dialog.get_value('estado_filter') || 'Activo') : null;
+
+                // Save scroll position before re-render
+                let $scroll_el = dialog.fields_dict.list_html.$wrapper.find('.wa-list-scroll');
+                let saved_list_scroll = $scroll_el.length ? $scroll_el.scrollTop() : 0;
+                let saved_page_scroll = $(window).scrollTop();
+
+                let filtered = all_records.filter(function (rec) {
+                    let text_match = rec.display.toLowerCase().includes(filter_text) ||
+                        rec.name.toLowerCase().includes(filter_text);
+                    if (!text_match) return false;
+                    if (estado_filter && estado_filter !== 'Todos') {
+                        return (rec.estado || '') === estado_filter;
+                    }
+                    return true;
+                });
 
                 let list_html = '';
 
                 // Select All / Unselect All bar (only for multi-select)
                 if (!is_single_select && filtered.length > 0) {
-                    let all_filtered_selected = filtered.every(r => selected.has(r.name));
                     list_html += `
                     <div style="display: flex; justify-content: space-between; align-items: center;
                         padding: 6px 12px; border-bottom: 2px solid #eee; background: #fafafa;">
@@ -534,24 +541,40 @@ function show_multiselect_dialog(frm, doctype_type) {
                             ${filtered.length} resultado(s)
                         </span>
                         <div style="display: flex; gap: 8px;">
-                            <a href="#" class="wa-select-all" style="font-size: 12px; color: ${WA_COLORS.teal};
-                                font-weight: 500; text-decoration: none;">Seleccionar Todos</a>
+                            <a href="javascript:void(0)" class="wa-select-all" style="font-size: 12px;
+                                color: ${WA_COLORS.teal}; font-weight: 500; text-decoration: none;">Seleccionar Todos</a>
                             <span style="color: #ddd;">|</span>
-                            <a href="#" class="wa-unselect-all" style="font-size: 12px; color: #999;
-                                text-decoration: none;">Limpar</a>
+                            <a href="javascript:void(0)" class="wa-unselect-all" style="font-size: 12px;
+                                color: #999; text-decoration: none;">Limpar</a>
                         </div>
                     </div>`;
                 }
 
-                list_html += `<div style="max-height: 380px; overflow-y: auto;">`;
+                list_html += `<div class="wa-list-scroll" style="max-height: 360px; overflow-y: auto;">`;
 
                 if (filtered.length === 0) {
                     list_html += `<div style="text-align: center; padding: 20px; color: #999;">
-                        Nenhum resultado para "${frappe.utils.escape_html(filter_text)}"</div>`;
+                        Nenhum resultado encontrado.</div>`;
                 } else {
                     filtered.forEach(function (rec) {
                         let is_checked = selected.has(rec.name);
                         let bg = is_checked ? '#e8f5e9' : 'white';
+
+                        // Info line: contact number(s) or member count
+                        let info_html = rec.info
+                            ? `<div style="font-size: 11px; color: ${WA_COLORS.grey_text}; margin-top: 2px;">
+                                ${frappe.utils.escape_html(rec.info)}</div>`
+                            : '';
+
+                        // Estado badge for Catequista
+                        let estado_badge = '';
+                        if (is_catequista && rec.estado) {
+                            let bc = rec.estado === 'Activo' ? WA_COLORS.green : '#aaa';
+                            estado_badge = `<span style="font-size: 10px; padding: 1px 7px; border-radius: 8px;
+                                background: ${bc}; color: white; margin-left: 6px; vertical-align: middle;">
+                                ${frappe.utils.escape_html(rec.estado)}</span>`;
+                        }
+
                         list_html += `
                         <div class="wa-select-row" data-name="${frappe.utils.escape_html(rec.name)}"
                             style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;
@@ -563,8 +586,11 @@ function show_multiselect_dialog(frm, doctype_type) {
                                 display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 ${is_checked ? '<span style="color: white; font-size: 12px;">&#10003;</span>' : ''}
                             </div>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 500; font-size: 14px;">${frappe.utils.escape_html(rec.display)}</div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 500; font-size: 14px;">
+                                    ${frappe.utils.escape_html(rec.display)}${estado_badge}
+                                </div>
+                                ${info_html}
                             </div>
                         </div>`;
                     });
@@ -576,22 +602,28 @@ function show_multiselect_dialog(frm, doctype_type) {
                 if (!is_single_select) {
                     list_html += `<div style="padding: 8px 12px; font-size: 12px; color: ${WA_COLORS.grey_text};
                         border-top: 1px solid #eee; font-weight: 500;">
-                        ${selected.size} seleccionado(s) de ${records.length}
+                        ${selected.size} seleccionado(s) de ${all_records.length}
                     </div>`;
                 }
 
                 dialog.fields_dict.list_html.$wrapper.html(list_html);
 
+                // Restore scroll positions after DOM update
+                requestAnimationFrame(function () {
+                    dialog.fields_dict.list_html.$wrapper.find('.wa-list-scroll').scrollTop(saved_list_scroll);
+                    $(window).scrollTop(saved_page_scroll);
+                });
+
                 // Bind Select All / Unselect All
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-all').on('click', function (e) {
                     e.preventDefault();
-                    filtered.forEach(r => selected.add(r.name));
-                    render_list(dialog.get_value('search'));
+                    filtered.forEach(function (rec) { selected.add(rec.name); });
+                    render_list();
                 });
                 dialog.fields_dict.list_html.$wrapper.find('.wa-unselect-all').on('click', function (e) {
                     e.preventDefault();
-                    filtered.forEach(r => selected.delete(r.name));
-                    render_list(dialog.get_value('search'));
+                    filtered.forEach(function (rec) { selected.delete(rec.name); });
+                    render_list();
                 });
 
                 // Bind row clicks
@@ -607,33 +639,35 @@ function show_multiselect_dialog(frm, doctype_type) {
                             selected.add(name);
                         }
                     }
-                    render_list(dialog.get_value('search'));
+                    render_list();
                 });
 
                 // Hover effect
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').hover(
                     function () {
-                        if (!selected.has($(this).data('name'))) {
-                            $(this).css('background', '#f9f9f9');
-                        }
+                        if (!selected.has($(this).data('name'))) $(this).css('background', '#f9f9f9');
                     },
                     function () {
-                        if (!selected.has($(this).data('name'))) {
-                            $(this).css('background', 'white');
-                        }
+                        if (!selected.has($(this).data('name'))) $(this).css('background', 'white');
                     }
                 );
             }
 
-            render_list('');
+            render_list();
 
             // Search binding
             dialog.fields_dict.search.$input.on('input', function () {
-                render_list($(this).val());
+                render_list();
             });
 
+            // Estado filter binding (Catequista only)
+            if (is_catequista) {
+                dialog.fields_dict.estado_filter.$input.on('change', function () {
+                    render_list();
+                });
+            }
+
             dialog.show();
-            // Focus search
             setTimeout(() => dialog.fields_dict.search.$input.focus(), 200);
         }
     });

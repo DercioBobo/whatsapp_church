@@ -41,14 +41,26 @@ def _resolve_single_doc(doctype, name, origem, incluir="contacto"):
     recipients = []
 
     if incluir in ("contacto", "ambos"):
-        raw_contacto = getattr(doc, "contacto", None)
-        for num in parse_contacto(raw_contacto):
-            recipients.append({
-                "nome": nome,
-                "contacto": num,
-                "origem": origem,
-                "referencia": name
-            })
+        if doctype == "Catequista":
+            # Catequista uses contacto_1 and contacto_2 instead of contacto
+            for field in ("contacto_1", "contacto_2"):
+                raw_contacto = getattr(doc, field, None)
+                for num in parse_contacto(raw_contacto):
+                    recipients.append({
+                        "nome": nome,
+                        "contacto": num,
+                        "origem": origem,
+                        "referencia": name
+                    })
+        else:
+            raw_contacto = getattr(doc, "contacto", None)
+            for num in parse_contacto(raw_contacto):
+                recipients.append({
+                    "nome": nome,
+                    "contacto": num,
+                    "origem": origem,
+                    "referencia": name
+                })
 
     if incluir in ("padrinhos", "ambos"):
         raw_padrinhos = getattr(doc, "contacto_padrinhos", None)
@@ -144,6 +156,91 @@ def _resolve_preparacao_doc(name, incluir="contacto"):
                 })
 
     return recipients
+
+
+@frappe.whitelist()
+def get_registros_para_dialogo(doctype):
+    """Return records with extra info (contact or member count) for the selection dialog."""
+    if doctype == "Catecumeno":
+        records = frappe.get_list(
+            "Catecumeno",
+            fields=["name", "nome_completo", "nome", "contacto"],
+            limit_page_length=0,
+            order_by="name asc"
+        )
+        return [
+            {
+                "name": r.name,
+                "display": r.nome_completo or r.nome or r.name,
+                "info": r.contacto or "",
+                "estado": ""
+            }
+            for r in records
+        ]
+
+    elif doctype == "Catequista":
+        records = frappe.get_list(
+            "Catequista",
+            fields=["name", "nome_completo", "nome", "contacto_1", "contacto_2", "estado"],
+            limit_page_length=0,
+            order_by="name asc"
+        )
+        result = []
+        for r in records:
+            contacts = [c for c in [r.get("contacto_1"), r.get("contacto_2")] if c]
+            result.append({
+                "name": r.name,
+                "display": r.nome_completo or r.nome or r.name,
+                "info": " / ".join(contacts),
+                "estado": r.get("estado") or ""
+            })
+        return result
+
+    elif doctype == "Turma":
+        records = frappe.get_list(
+            "Turma",
+            fields=["name"],
+            limit_page_length=0,
+            order_by="name asc"
+        )
+        counts = frappe.db.sql(
+            "SELECT parent, COUNT(*) as cnt FROM `tabTurma Catecumenos` GROUP BY parent",
+            as_dict=True
+        )
+        count_map = {c.parent: c.cnt for c in counts}
+        return [
+            {
+                "name": r.name,
+                "display": r.name,
+                "info": "{} membro(s)".format(count_map.get(r.name, 0)),
+                "estado": ""
+            }
+            for r in records
+        ]
+
+    elif doctype == "Preparacao do Sacramento":
+        records = frappe.get_list(
+            "Preparacao do Sacramento",
+            fields=["name"],
+            limit_page_length=0,
+            order_by="name asc"
+        )
+        counts = frappe.db.sql(
+            "SELECT parent, COUNT(*) as cnt FROM `tabCandidatos ao Sacramento Table` GROUP BY parent",
+            as_dict=True
+        )
+        count_map = {c.parent: c.cnt for c in counts}
+        return [
+            {
+                "name": r.name,
+                "display": r.name,
+                "info": "{} candidato(s)".format(count_map.get(r.name, 0)),
+                "estado": ""
+            }
+            for r in records
+        ]
+
+    return []
 
 
 class EnvioWhatsAppCatequese(Document):
