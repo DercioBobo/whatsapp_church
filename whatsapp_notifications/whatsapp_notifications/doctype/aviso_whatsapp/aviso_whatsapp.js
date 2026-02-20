@@ -675,12 +675,41 @@ function show_add_fonte_dialog(frm) {
     });
 }
 
+// Dispatcher: route to specific dialog per type
 function show_configure_fonte_dialog(frm, tipo) {
-    let fields = [];
-    let defaults = { tipo_fonte: tipo };
+    if (tipo === 'Numeros Manuais') {
+        show_manual_fonte_dialog(frm);
+    } else if (tipo === 'Grupo WhatsApp') {
+        show_grupo_fonte_dialog(frm);
+    } else if (tipo === 'DocType') {
+        show_doctype_fonte_dialog(frm);
+    } else {
+        // Catecumenos, Catequistas, Turma, Preparacao Sacramento
+        show_catechism_picker_dialog(frm, tipo);
+    }
+}
 
-    if (['Catecumenos', 'Catequistas'].includes(tipo)) {
-        fields.push({
+// ============================================================
+// Catechism picker: searchable list, "Todos" or specific record
+// ============================================================
+function show_catechism_picker_dialog(frm, tipo) {
+    let api_tipo_map = {
+        'Catecumenos': 'Catecumeno',
+        'Catequistas': 'Catequista',
+        'Turma': 'Turma',
+        'Preparacao Sacramento': 'Preparacao do Sacramento'
+    };
+    let api_tipo = api_tipo_map[tipo];
+    let has_status_filter = ['Catecumenos', 'Catequistas', 'Turma'].includes(tipo);
+    let has_padrinhos = ['Catecumenos', 'Preparacao Sacramento'].includes(tipo);
+
+    let selected_name = null;    // null = Todos; string = specific record name
+    let selected_display = null; // display label of selected record
+    let all_records = [];
+
+    let dialog_fields = [];
+    if (has_status_filter) {
+        dialog_fields.push({
             fieldname: 'filtro_status',
             fieldtype: 'Select',
             label: 'Filtrar por Status',
@@ -688,94 +717,381 @@ function show_configure_fonte_dialog(frm, tipo) {
             default: 'Activo',
             description: 'Deixe vazio para incluir todos'
         });
-        if (tipo === 'Catecumenos') {
-            fields.push({ fieldname: 'nome_registo', fieldtype: 'Data', label: 'Catecumeno Espec\u00edfico (opcional)' });
-            fields.push({ fieldname: 'incluir_padrinhos', fieldtype: 'Check', label: 'Incluir Padrinhos' });
-        } else {
-            fields.push({ fieldname: 'nome_registo', fieldtype: 'Data', label: 'Catequista Espec\u00edfico (opcional)' });
-        }
-    } else if (tipo === 'Turma') {
-        fields.push({ fieldname: 'filtro_status', fieldtype: 'Data', label: 'Filtro Status', description: 'Ex: Activo' });
-        fields.push({ fieldname: 'nome_registo', fieldtype: 'Data', label: 'Turma Espec\u00edfica (opcional, vazio = todas)' });
-    } else if (tipo === 'Preparacao Sacramento') {
-        fields.push({ fieldname: 'nome_registo', fieldtype: 'Data', label: 'Preparacao Espec\u00edfica (opcional, vazio = todas)' });
-        fields.push({ fieldname: 'incluir_padrinhos', fieldtype: 'Check', label: 'Incluir Padrinhos' });
-    } else if (tipo === 'DocType') {
-        fields.push({
-            fieldname: 'doctype_fonte',
-            fieldtype: 'Data',
-            label: 'Nome do DocType',
-            reqd: 1,
-            description: 'Ex: Catecumeno, Employee, Customer...'
-        });
-        fields.push({ fieldname: 'campo_contacto', fieldtype: 'Select', label: 'Campo de Contacto', reqd: 1, options: '' });
-        fields.push({ fieldname: 'usar_child_table', fieldtype: 'Check', label: 'Contactos numa Child Table' });
-        fields.push({ fieldname: 'child_table_field', fieldtype: 'Select', label: 'Campo da Child Table', options: '', depends_on: 'usar_child_table' });
-        fields.push({ fieldname: 'campo_contacto_child', fieldtype: 'Select', label: 'Campo Contacto (Child)', options: '', depends_on: 'usar_child_table' });
-        fields.push({ fieldname: 'filtro_campo', fieldtype: 'Data', label: 'Campo de Filtro (opcional)' });
-        fields.push({ fieldname: 'filtro_valor', fieldtype: 'Data', label: 'Valor de Filtro (opcional)' });
-    } else if (tipo === 'Numeros Manuais') {
-        fields.push({
-            fieldname: 'numeros',
-            fieldtype: 'Small Text',
-            label: 'N\u00fameros de Telefone',
-            reqd: 1,
-            description: 'Um por linha, ou separados por v\u00edrgula',
-            placeholder: '244900000000\n244900000001'
-        });
-    } else if (tipo === 'Grupo WhatsApp') {
-        // Show group picker
-        show_grupo_fonte_dialog(frm);
-        return;
     }
+    if (has_padrinhos) {
+        dialog_fields.push({
+            fieldname: 'incluir_padrinhos',
+            fieldtype: 'Check',
+            label: 'Incluir contactos de Padrinhos'
+        });
+    }
+    dialog_fields.push({ fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar...' });
+    dialog_fields.push({ fieldname: 'list_html', fieldtype: 'HTML' });
 
     let dialog = new frappe.ui.Dialog({
-        title: 'Configurar Fonte: ' + tipo,
-        fields: fields,
-        primary_action_label: 'Adicionar',
-        primary_action: function (values) {
+        title: 'Seleccionar Fonte: ' + tipo,
+        size: 'large',
+        fields: dialog_fields,
+        primary_action_label: 'Adicionar Fonte',
+        primary_action: function () {
+            let values = dialog.get_values() || {};
             dialog.hide();
-            let fonte_data = Object.assign({ tipo_fonte: tipo }, values);
-            fonte_data.descricao = build_descricao(tipo, values);
+            let fonte_data = {
+                tipo_fonte: tipo,
+                filtro_status: values.filtro_status || '',
+                nome_registo: selected_name || '',
+                incluir_padrinhos: values.incluir_padrinhos || 0
+            };
+            fonte_data.descricao = build_descricao(tipo, {
+                filtro_status: fonte_data.filtro_status,
+                nome_registo: fonte_data.nome_registo,
+                incluir_padrinhos: fonte_data.incluir_padrinhos,
+                _display: selected_display
+            });
             add_fonte_to_frm(frm, fonte_data);
         }
     });
-    dialog.show();
 
-    // For DocType: load phone fields when doctype changes
-    if (tipo === 'DocType') {
-        let $dt_input = dialog.fields_dict.doctype_fonte.$input;
-        $dt_input.on('blur', function () {
-            let dt = $(this).val().trim();
-            if (!dt) return;
-            frappe.call({
-                method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_phone_fields',
-                args: { doctype: dt },
-                callback: function (r) {
-                    if (r.message) {
-                        let opts = r.message.map(f => f.fieldname).join('\n');
-                        dialog.fields_dict.campo_contacto.df.options = opts;
-                        dialog.fields_dict.campo_contacto.refresh();
-                        dialog.fields_dict.campo_contacto_child.df.options = opts;
-                        dialog.fields_dict.campo_contacto_child.refresh();
-                    }
-                }
-            });
-            frappe.call({
-                method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_child_tables',
-                args: { doctype: dt },
-                callback: function (r) {
-                    if (r.message) {
-                        let opts = r.message.map(f => f.fieldname).join('\n');
-                        dialog.fields_dict.child_table_field.df.options = opts;
-                        dialog.fields_dict.child_table_field.refresh();
-                    }
-                }
-            });
+    function render_list() {
+        let filter_text = (dialog.get_value('search') || '').toLowerCase();
+        let status_filter = has_status_filter ? (dialog.get_value('filtro_status') || '') : null;
+
+        let filtered = all_records.filter(function (rec) {
+            let match = (rec.display || '').toLowerCase().includes(filter_text) ||
+                (rec.name || '').toLowerCase().includes(filter_text);
+            if (!match) return false;
+            if (status_filter) return (rec.status || '') === status_filter;
+            return true;
         });
+
+        let todos_sel = (selected_name === null);
+
+        let list_html = `<div style="border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; max-height: 360px; overflow-y: auto;">`;
+
+        // "Todos" row
+        list_html += `
+        <div class="wa-pick-row" data-name="" data-display=""
+            style="display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+            border-bottom: 2px solid #e0e0e0; cursor: pointer;
+            background: ${todos_sel ? '#e8f5e9' : '#fafafa'}; transition: background .1s;">
+            <div style="width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+                border: 2px solid ${todos_sel ? WA_COLORS.green : '#ccc'};
+                background: ${todos_sel ? WA_COLORS.green : 'white'};
+                display: flex; align-items: center; justify-content: center;">
+                ${todos_sel ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
+            </div>
+            <div>
+                <div style="font-weight: 600; font-size: 14px; color: ${todos_sel ? WA_COLORS.teal : '#333'};">
+                    Todos os ${tipo}
+                    ${status_filter ? `<span style="font-size: 11px; font-weight: 400;
+                        color: ${WA_COLORS.grey_text};"> com status: ${frappe.utils.escape_html(status_filter)}</span>` : ''}
+                </div>
+                <div style="font-size: 11px; color: ${WA_COLORS.grey_text};">
+                    ${filtered.length} registo(s) vis\u00edvel(is)
+                </div>
+            </div>
+        </div>`;
+
+        if (filtered.length === 0) {
+            list_html += `<div style="padding: 20px; text-align: center; color: ${WA_COLORS.grey_text}; font-size: 13px;">
+                Nenhum resultado encontrado.</div>`;
+        } else {
+            filtered.forEach(function (rec) {
+                let is_sel = (selected_name === rec.name);
+                list_html += `
+                <div class="wa-pick-row" data-name="${frappe.utils.escape_html(rec.name)}"
+                    data-display="${frappe.utils.escape_html(rec.display || rec.name)}"
+                    style="display: flex; align-items: center; gap: 12px; padding: 9px 14px;
+                    border-bottom: 1px solid #f5f5f5; cursor: pointer;
+                    background: ${is_sel ? '#e8f5e9' : 'white'}; transition: background .1s;">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+                        border: 2px solid ${is_sel ? WA_COLORS.green : '#ccc'};
+                        background: ${is_sel ? WA_COLORS.green : 'white'};
+                        display: flex; align-items: center; justify-content: center;">
+                        ${is_sel ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 500; font-size: 13px; white-space: nowrap;
+                            overflow: hidden; text-overflow: ellipsis;
+                            color: ${is_sel ? WA_COLORS.teal : '#333'};">
+                            ${frappe.utils.escape_html(rec.display || rec.name)}
+                            ${rec.status && !status_filter ? `<span style="font-size: 10px; padding: 1px 6px;
+                                border-radius: 8px; margin-left: 5px;
+                                background: ${rec.status === 'Activo' ? WA_COLORS.green : '#aaa'};
+                                color: white;">${frappe.utils.escape_html(rec.status)}</span>` : ''}
+                        </div>
+                        ${rec.info ? `<div style="font-size: 11px; color: ${WA_COLORS.grey_text}; white-space: nowrap;
+                            overflow: hidden; text-overflow: ellipsis;">${frappe.utils.escape_html(rec.info)}</div>` : ''}
+                    </div>
+                </div>`;
+            });
+        }
+        list_html += '</div>';
+        list_html += `
+        <div style="padding: 6px 12px; font-size: 12px; border-top: 1px solid #eee; margin-top: 4px;">
+            ${selected_name === null
+                ? `<span style="color: ${WA_COLORS.teal}; font-weight: 500;">&#10003; Todos os ${tipo} seleccionados</span>`
+                : `<span style="color: ${WA_COLORS.teal}; font-weight: 500;">&#10003; Espec\u00edfico: ${frappe.utils.escape_html(selected_display || selected_name)}</span>`
+            }
+        </div>`;
+
+        dialog.fields_dict.list_html.$wrapper.html(list_html);
+
+        dialog.fields_dict.list_html.$wrapper.find('.wa-pick-row').on('click', function () {
+            let name = $(this).data('name');
+            let disp = $(this).data('display');
+            selected_name = name === '' ? null : name;
+            selected_display = name === '' ? null : disp;
+            render_list();
+        }).hover(
+            function () {
+                let name = $(this).data('name');
+                let is_active = (name === '' && selected_name === null) || name === selected_name;
+                if (!is_active) $(this).css('background', '#f0f9f7');
+            },
+            function () {
+                let name = $(this).data('name');
+                let is_active = (name === '' && selected_name === null) || name === selected_name;
+                $(this).css('background', is_active ? '#e8f5e9' : (name === '' ? '#fafafa' : 'white'));
+            }
+        );
     }
+
+    // Load records, then show dialog
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.envio_whatsapp_catequese.envio_whatsapp_catequese.get_registros_para_dialogo',
+        args: { doctype: api_tipo },
+        freeze: true,
+        freeze_message: 'Carregando ' + tipo + '...',
+        callback: function (r) {
+            all_records = r.message || [];
+            render_list();
+            dialog.fields_dict.search.$input.on('input', function () { render_list(); });
+            if (has_status_filter) {
+                dialog.fields_dict.filtro_status.$input.on('change', function () { render_list(); });
+            }
+        }
+    });
+
+    dialog.show();
+    setTimeout(function () {
+        if (dialog.fields_dict.search) dialog.fields_dict.search.$input.focus();
+    }, 300);
 }
 
+// ============================================================
+// DocType dynamic fonte dialog — Link field for DocType name
+// ============================================================
+function show_doctype_fonte_dialog(frm) {
+    let dialog = new frappe.ui.Dialog({
+        title: 'Fonte DocType Din\u00e2mico',
+        size: 'large',
+        fields: [
+            {
+                fieldname: 'doctype_fonte',
+                fieldtype: 'Link',
+                options: 'DocType',
+                label: 'DocType',
+                reqd: 1,
+                description: 'Pesquise e seleccione qualquer DocType do sistema'
+            },
+            {
+                fieldname: 'col_break_main',
+                fieldtype: 'Column Break'
+            },
+            {
+                fieldname: 'campo_contacto',
+                fieldtype: 'Select',
+                label: 'Campo de Contacto (telefone)',
+                reqd: 1,
+                options: '',
+                description: 'Seleccione ap\u00f3s escolher o DocType'
+            },
+            {
+                fieldname: 'section_child',
+                fieldtype: 'Section Break',
+                label: 'Contactos numa Child Table',
+                collapsible: 1
+            },
+            {
+                fieldname: 'usar_child_table',
+                fieldtype: 'Check',
+                label: 'Os contactos est\u00e3o numa child table'
+            },
+            {
+                fieldname: 'child_table_field',
+                fieldtype: 'Select',
+                label: 'Campo da Child Table',
+                options: '',
+                depends_on: 'eval:doc.usar_child_table==1'
+            },
+            {
+                fieldname: 'campo_contacto_child',
+                fieldtype: 'Select',
+                label: 'Campo Contacto (na child table)',
+                options: '',
+                depends_on: 'eval:doc.usar_child_table==1'
+            },
+            {
+                fieldname: 'section_filter',
+                fieldtype: 'Section Break',
+                label: 'Filtro (opcional)',
+                collapsible: 1
+            },
+            {
+                fieldname: 'filtro_campo',
+                fieldtype: 'Data',
+                label: 'Nome do Campo de Filtro',
+                description: 'Ex: status, departamento'
+            },
+            {
+                fieldname: 'filtro_valor',
+                fieldtype: 'Data',
+                label: 'Valor do Filtro',
+                description: 'Ex: Activo, Sales'
+            }
+        ],
+        primary_action_label: 'Adicionar Fonte',
+        primary_action: function () {
+            let values = dialog.get_values();
+            if (!values || !values.doctype_fonte) {
+                frappe.msgprint('Seleccione o DocType.');
+                return;
+            }
+            let contact_field = values.usar_child_table ? values.campo_contacto_child : values.campo_contacto;
+            if (!contact_field) {
+                frappe.msgprint('Seleccione o campo de contacto.');
+                return;
+            }
+            dialog.hide();
+            add_fonte_to_frm(frm, {
+                tipo_fonte: 'DocType',
+                doctype_fonte: values.doctype_fonte,
+                campo_contacto: values.campo_contacto || '',
+                usar_child_table: values.usar_child_table || 0,
+                child_table_field: values.child_table_field || '',
+                campo_contacto_child: values.campo_contacto_child || '',
+                filtro_campo: values.filtro_campo || '',
+                filtro_valor: values.filtro_valor || '',
+                descricao: build_descricao('DocType', values)
+            });
+        }
+    });
+
+    function load_fields_for_doctype(dt) {
+        if (!dt) return;
+        frappe.show_alert({ message: 'Carregando campos de ' + dt + '...', indicator: 'blue' }, 2);
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_phone_fields',
+            args: { doctype: dt },
+            callback: function (r) {
+                if (r.message && r.message.length) {
+                    let opts = '\n' + r.message.map(function (f) {
+                        return f.fieldname + (f.label && f.label !== f.fieldname ? ' (' + f.label + ')' : '');
+                    }).join('\n');
+                    // Store just fieldnames for actual value
+                    let opts_plain = '\n' + r.message.map(f => f.fieldname).join('\n');
+                    dialog.fields_dict.campo_contacto.df.options = opts_plain;
+                    dialog.fields_dict.campo_contacto.refresh();
+                    dialog.fields_dict.campo_contacto_child.df.options = opts_plain;
+                    dialog.fields_dict.campo_contacto_child.refresh();
+                    frappe.show_alert({
+                        message: r.message.length + ' campo(s) de telefone encontrado(s)',
+                        indicator: 'green'
+                    }, 3);
+                } else {
+                    dialog.fields_dict.campo_contacto.df.options = '';
+                    dialog.fields_dict.campo_contacto.refresh();
+                    frappe.show_alert({ message: 'Nenhum campo de telefone encontrado', indicator: 'orange' }, 4);
+                }
+            }
+        });
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_child_tables',
+            args: { doctype: dt },
+            callback: function (r) {
+                if (r.message && r.message.length) {
+                    let opts = '\n' + r.message.map(f => f.fieldname).join('\n');
+                    dialog.fields_dict.child_table_field.df.options = opts;
+                    dialog.fields_dict.child_table_field.refresh();
+                }
+            }
+        });
+    }
+
+    // React to Link field selection (awesomplete) or manual entry (blur)
+    dialog.fields_dict.doctype_fonte.$input.on('awesomplete-selectcomplete', function () {
+        setTimeout(function () {
+            let dt = dialog.get_value('doctype_fonte');
+            if (dt) load_fields_for_doctype(dt);
+        }, 100);
+    });
+    dialog.fields_dict.doctype_fonte.$input.on('blur', function () {
+        let dt = dialog.get_value('doctype_fonte');
+        if (dt) load_fields_for_doctype(dt);
+    });
+
+    dialog.show();
+}
+
+// ============================================================
+// Manual numbers dialog — Mozambican format placeholder
+// ============================================================
+function show_manual_fonte_dialog(frm) {
+    let dialog = new frappe.ui.Dialog({
+        title: 'Adicionar N\u00fameros Manuais',
+        fields: [
+            {
+                fieldname: 'numeros',
+                fieldtype: 'Small Text',
+                label: 'N\u00fameros de Telefone',
+                reqd: 1,
+                description: 'Um n\u00famero por linha, ou separados por v\u00edrgula. Incluir c\u00f3digo do pa\u00eds (258).'
+            },
+            {
+                fieldname: 'hint_html',
+                fieldtype: 'HTML'
+            }
+        ],
+        primary_action_label: 'Adicionar',
+        primary_action: function (values) {
+            if (!values.numeros || !values.numeros.trim()) return;
+            dialog.hide();
+            let lines = values.numeros.split('\n').filter(l => l.trim());
+            add_fonte_to_frm(frm, {
+                tipo_fonte: 'Numeros Manuais',
+                numeros: values.numeros,
+                descricao: lines.length + ' n\u00famero(s) manual(is)'
+            });
+        }
+    });
+
+    dialog.fields_dict.hint_html.$wrapper.html(`
+    <div style="padding: 8px 0; font-size: 12px; color: ${WA_COLORS.grey_text};">
+        <strong>Exemplos de formato:</strong>
+        <div style="font-family: monospace; background: #f5f6f7; border-radius: 6px;
+            padding: 8px 12px; margin-top: 6px; line-height: 1.8;">
+            258840000000<br>
+            258860000000<br>
+            258870000000
+        </div>
+        <div style="margin-top: 6px;">
+            Prefixos Mo\u00e7ambique: <strong>84</strong>, <strong>85</strong>, <strong>86</strong>, <strong>87</strong>, <strong>82</strong>, <strong>83</strong>
+            (sempre com c\u00f3digo pa\u00eds <strong>258</strong>)
+        </div>
+    </div>`);
+
+    // Set placeholder via DOM after show
+    dialog.show();
+    setTimeout(function () {
+        dialog.fields_dict.numeros.$input &&
+            dialog.fields_dict.numeros.$input.attr('placeholder', '258840123456\n258860123456\n258870123456');
+    }, 100);
+}
+
+// ============================================================
+// WhatsApp group picker (multi-select, same as before)
+// ============================================================
 function show_grupo_fonte_dialog(frm) {
     frappe.call({
         method: 'whatsapp_notifications.whatsapp_notifications.api.fetch_whatsapp_groups',
@@ -800,7 +1116,7 @@ function show_grupo_fonte_dialog(frm) {
                     { fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar grupo...' },
                     { fieldname: 'list_html', fieldtype: 'HTML' }
                 ],
-                primary_action_label: 'Adicionar Grupos',
+                primary_action_label: 'Adicionar Grupos Seleccionados',
                 primary_action: function () {
                     if (selected.size === 0) { frappe.msgprint('Seleccione pelo menos um grupo.'); return; }
                     dialog.hide();
@@ -809,7 +1125,7 @@ function show_grupo_fonte_dialog(frm) {
                             tipo_fonte: 'Grupo WhatsApp',
                             grupo_id: g.id,
                             grupo_nome: g.subject || g.id,
-                            descricao: g.subject || g.id
+                            descricao: (g.subject || g.id) + (g.size ? ' (' + g.size + ' membros)' : '')
                         });
                     });
                 }
@@ -821,74 +1137,98 @@ function show_grupo_fonte_dialog(frm) {
                     (g.subject || '').toLowerCase().includes(filter_text) ||
                     (g.id || '').toLowerCase().includes(filter_text)
                 );
-                let list_html = '<div style="max-height: 380px; overflow-y: auto;">';
+                let list_html = `<div style="border: 1px solid #e0e0e0; border-radius: 8px;
+                    overflow: hidden; max-height: 380px; overflow-y: auto;">`;
                 if (filtered.length === 0) {
-                    list_html += '<div style="text-align: center; padding: 20px; color: #999;">Nenhum grupo encontrado.</div>';
+                    list_html += `<div style="padding: 24px; text-align: center;
+                        color: ${WA_COLORS.grey_text}; font-size: 13px;">Nenhum grupo encontrado.</div>`;
                 } else {
                     filtered.forEach(function (g) {
                         let is_checked = selected.has(g.id);
                         list_html += `
                         <div class="wa-select-row" data-id="${frappe.utils.escape_html(g.id)}"
-                            style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+                            style="display: flex; align-items: center; gap: 12px; padding: 10px 14px;
                             border-bottom: 1px solid #f0f0f0; cursor: pointer;
-                            background: ${is_checked ? '#e8f5e9' : 'white'};">
-                            <div style="width: 20px; height: 20px; border-radius: 4px;
+                            background: ${is_checked ? '#e8f5e9' : 'white'}; transition: background .1s;">
+                            <div style="width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0;
                                 border: 2px solid ${is_checked ? WA_COLORS.green : '#ccc'};
                                 background: ${is_checked ? WA_COLORS.green : 'white'};
-                                display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                ${is_checked ? '<span style="color:white;font-size:12px;">&#10003;</span>' : ''}
+                                display: flex; align-items: center; justify-content: center;">
+                                ${is_checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
                             </div>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 500; font-size: 14px;">${frappe.utils.escape_html(g.subject || g.id)}</div>
+                            <div style="width: 36px; height: 36px; border-radius: 50%;
+                                background: ${WA_COLORS.dark_green}; flex-shrink: 0;
+                                display: flex; align-items: center; justify-content: center;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                                </svg>
+                            </div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 500; font-size: 14px; white-space: nowrap;
+                                    overflow: hidden; text-overflow: ellipsis;">
+                                    ${frappe.utils.escape_html(g.subject || g.id)}
+                                </div>
                                 <div style="font-size: 11px; color: ${WA_COLORS.grey_text};">
-                                    ${g.size ? g.size + ' membros' : ''}
+                                    ${g.size ? g.size + ' membros' : 'Grupo'}
                                 </div>
                             </div>
                         </div>`;
                     });
                 }
                 list_html += '</div>';
+                list_html += `<div style="padding: 6px 12px; font-size: 12px; color: ${WA_COLORS.grey_text};
+                    border-top: 1px solid #eee; margin-top: 4px;">
+                    ${selected.size > 0
+                        ? `<span style="color: ${WA_COLORS.teal}; font-weight: 500;">&#10003; ${selected.size} grupo(s) seleccionado(s)</span>`
+                        : 'Nenhum grupo seleccionado'}
+                </div>`;
                 dialog.fields_dict.list_html.$wrapper.html(list_html);
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function () {
                     let id = $(this).data('id');
                     if (selected.has(id)) { selected.delete(id); } else { selected.add(id); }
                     render_list(dialog.get_value('search'));
-                });
+                }).hover(
+                    function () { if (!selected.has($(this).data('id'))) $(this).css('background', '#f0f9f7'); },
+                    function () { if (!selected.has($(this).data('id'))) $(this).css('background', 'white'); }
+                );
             }
 
             render_list('');
             dialog.fields_dict.search.$input.on('input', function () { render_list($(this).val()); });
             dialog.show();
+            setTimeout(function () { dialog.fields_dict.search.$input.focus(); }, 200);
         }
     });
 }
 
 function build_descricao(tipo, values) {
+    let display = values._display; // optional resolved display name
     if (tipo === 'Catecumenos') {
         let parts = [];
-        if (values.filtro_status) parts.push('Status: ' + values.filtro_status);
-        if (values.nome_registo) parts.push(values.nome_registo);
-        else parts.push('Todos');
+        if (values.filtro_status) parts.push(values.filtro_status);
+        parts.push(display || values.nome_registo || 'Todos');
         if (values.incluir_padrinhos) parts.push('+ Padrinhos');
-        return parts.join(' | ');
+        return parts.join(' \u00b7 ');
     }
     if (tipo === 'Catequistas') {
         let parts = [];
-        if (values.filtro_status) parts.push('Status: ' + values.filtro_status);
-        if (values.nome_registo) parts.push(values.nome_registo);
-        else parts.push('Todos');
-        return parts.join(' | ');
+        if (values.filtro_status) parts.push(values.filtro_status);
+        parts.push(display || values.nome_registo || 'Todos');
+        return parts.join(' \u00b7 ');
     }
     if (tipo === 'Turma') {
-        return values.nome_registo ? 'Turma: ' + values.nome_registo : 'Todas as Turmas';
+        let s = display || values.nome_registo;
+        return s ? 'Turma: ' + s : 'Todas as Turmas';
     }
     if (tipo === 'Preparacao Sacramento') {
-        let s = values.nome_registo ? values.nome_registo : 'Todas';
+        let s = display || values.nome_registo || 'Todas';
         if (values.incluir_padrinhos) s += ' + Padrinhos';
         return s;
     }
     if (tipo === 'DocType') {
-        return values.doctype_fonte + ' [' + (values.campo_contacto || '?') + ']';
+        let base = (values.doctype_fonte || '?') + ' \u2192 ' + (values.campo_contacto || values.campo_contacto_child || '?');
+        if (values.filtro_campo && values.filtro_valor) base += ' [' + values.filtro_campo + '=' + values.filtro_valor + ']';
+        return base;
     }
     if (tipo === 'Numeros Manuais') {
         let count = (values.numeros || '').split('\n').filter(l => l.trim()).length;
