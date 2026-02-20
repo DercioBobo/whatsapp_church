@@ -173,7 +173,7 @@ def get_registros_para_dialogo(doctype):
                 "name": r.name,
                 "display": r.nome_completo or r.nome or r.name,
                 "info": r.contacto or "",
-                "estado": ""
+                "status": ""
             }
             for r in records
         ]
@@ -181,7 +181,7 @@ def get_registros_para_dialogo(doctype):
     elif doctype == "Catequista":
         records = frappe.get_list(
             "Catequista",
-            fields=["name", "nome_completo", "nome", "contacto_1", "contacto_2", "estado"],
+            fields=["name", "nome_completo", "nome", "contacto_1", "contacto_2", "status"],
             limit_page_length=0,
             order_by="name asc"
         )
@@ -192,7 +192,7 @@ def get_registros_para_dialogo(doctype):
                 "name": r.name,
                 "display": r.nome_completo or r.nome or r.name,
                 "info": " / ".join(contacts),
-                "estado": r.get("estado") or ""
+                "status": r.get("status") or ""
             })
         return result
 

@@ -290,16 +290,18 @@ function render_recipients_area(frm) {
                 `<span style="font-size: 9px; background: ${WA_COLORS.dark_green}; color: white;
                     border-radius: 3px; padding: 0 4px; margin-left: 4px;">${frappe.utils.escape_html(r.origem)}</span>` : '';
 
+            let has_distinct_name = r.nome && r.nome !== r.contacto;
             html += `
-            <div class="wa-chip" data-idx="${idx}" style="display: inline-flex; align-items: center; gap: 4px;
+            <div class="wa-chip" data-idx="${idx}" style="display: inline-flex; align-items: center; gap: 6px;
                 padding: 4px 10px; background: white; border: 1px solid ${chip_border};
-                border-radius: 16px; font-size: 12px; white-space: nowrap;"
+                border-radius: 16px; font-size: 12px;"
                 title="${frappe.utils.escape_html(r.contacto)}${r.erro ? ' - Erro: ' + frappe.utils.escape_html(r.erro) : ''}">
-                <span style="font-weight: 500;">${name_display}</span>
-                ${origin_badge}
-                ${status_icon}
+                <div style="display: flex; flex-direction: column; line-height: 1.3; min-width: 0;">
+                    <span style="font-weight: 500; white-space: nowrap;">${name_display}${origin_badge}${status_icon}</span>
+                    ${has_distinct_name ? `<span style="font-size: 10px; color: ${WA_COLORS.grey_text}; white-space: nowrap;">${frappe.utils.escape_html(r.contacto)}</span>` : ''}
+                </div>
                 ${is_draft ? `<span class="wa-chip-remove" data-idx="${r.idx}" style="cursor: pointer; color: #999;
-                    margin-left: 2px; font-size: 14px; line-height: 1;">&times;</span>` : ''}
+                    font-size: 14px; line-height: 1; align-self: flex-start;">&times;</span>` : ''}
             </div>`;
         });
         html += '</div>';
@@ -513,7 +515,12 @@ function show_multiselect_dialog(frm, doctype_type) {
 
             function render_list() {
                 let filter_text = (dialog.get_value('search') || '').toLowerCase();
-                let estado_filter = is_catequista ? (dialog.get_value('estado_filter') || 'Activo') : null;
+                let status_filter = is_catequista ? (dialog.get_value('estado_filter') || 'Activo') : null;
+
+                // Build set of already-added references from current recipients
+                let existing_refs = new Set(
+                    (frm.doc.destinatarios || []).map(function (r) { return r.referencia; }).filter(Boolean)
+                );
 
                 // Save scroll position before re-render
                 let $scroll_el = dialog.fields_dict.list_html.$wrapper.find('.wa-list-scroll');
@@ -524,11 +531,14 @@ function show_multiselect_dialog(frm, doctype_type) {
                     let text_match = rec.display.toLowerCase().includes(filter_text) ||
                         rec.name.toLowerCase().includes(filter_text);
                     if (!text_match) return false;
-                    if (estado_filter && estado_filter !== 'Todos') {
-                        return (rec.estado || '') === estado_filter;
+                    if (status_filter && status_filter !== 'Todos') {
+                        return (rec.status || '') === status_filter;
                     }
                     return true;
                 });
+
+                // Selectable = not already added and not currently selected (for counter clarity)
+                let selectable = filtered.filter(function (rec) { return !existing_refs.has(rec.name); });
 
                 let list_html = '';
 
@@ -539,6 +549,8 @@ function show_multiselect_dialog(frm, doctype_type) {
                         padding: 6px 12px; border-bottom: 2px solid #eee; background: #fafafa;">
                         <span style="font-size: 12px; color: ${WA_COLORS.grey_text};">
                             ${filtered.length} resultado(s)
+                            ${existing_refs.size > 0 ? `<span style="color: #f0a500; margin-left: 6px;">
+                                · ${filtered.length - selectable.length} j\u00e1 adicionado(s)</span>` : ''}
                         </span>
                         <div style="display: flex; gap: 8px;">
                             <a href="javascript:void(0)" class="wa-select-all" style="font-size: 12px;
@@ -557,8 +569,9 @@ function show_multiselect_dialog(frm, doctype_type) {
                         Nenhum resultado encontrado.</div>`;
                 } else {
                     filtered.forEach(function (rec) {
+                        let is_already_added = existing_refs.has(rec.name);
                         let is_checked = selected.has(rec.name);
-                        let bg = is_checked ? '#e8f5e9' : 'white';
+                        let bg = is_already_added ? '#f9f9f9' : (is_checked ? '#e8f5e9' : 'white');
 
                         // Info line: contact number(s) or member count
                         let info_html = rec.info
@@ -566,29 +579,39 @@ function show_multiselect_dialog(frm, doctype_type) {
                                 ${frappe.utils.escape_html(rec.info)}</div>`
                             : '';
 
-                        // Estado badge for Catequista
-                        let estado_badge = '';
-                        if (is_catequista && rec.estado) {
-                            let bc = rec.estado === 'Activo' ? WA_COLORS.green : '#aaa';
-                            estado_badge = `<span style="font-size: 10px; padding: 1px 7px; border-radius: 8px;
+                        // Status badge for Catequista
+                        let status_badge = '';
+                        if (is_catequista && rec.status) {
+                            let bc = rec.status === 'Activo' ? WA_COLORS.green : '#aaa';
+                            status_badge = `<span style="font-size: 10px; padding: 1px 7px; border-radius: 8px;
                                 background: ${bc}; color: white; margin-left: 6px; vertical-align: middle;">
-                                ${frappe.utils.escape_html(rec.estado)}</span>`;
+                                ${frappe.utils.escape_html(rec.status)}</span>`;
                         }
 
-                        list_html += `
-                        <div class="wa-select-row" data-name="${frappe.utils.escape_html(rec.name)}"
-                            style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;
-                            border-bottom: 1px solid #f0f0f0; cursor: pointer; background: ${bg};
-                            transition: background .1s;">
-                            <div style="width: 20px; height: 20px; border-radius: ${is_single_select ? '50%' : '4px'};
+                        // Already-added indicator replaces checkbox
+                        let check_or_added = is_already_added
+                            ? `<span style="font-size: 10px; padding: 2px 7px; border-radius: 8px;
+                                background: #f0a500; color: white; white-space: nowrap; flex-shrink: 0;">
+                                J\u00e1 adicionado</span>`
+                            : `<div style="width: 20px; height: 20px; border-radius: ${is_single_select ? '50%' : '4px'};
                                 border: 2px solid ${is_checked ? WA_COLORS.green : '#ccc'};
                                 background: ${is_checked ? WA_COLORS.green : 'white'};
                                 display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 ${is_checked ? '<span style="color: white; font-size: 12px;">&#10003;</span>' : ''}
-                            </div>
+                              </div>`;
+
+                        list_html += `
+                        <div class="wa-select-row" data-name="${frappe.utils.escape_html(rec.name)}"
+                            data-added="${is_already_added ? '1' : '0'}"
+                            style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+                            border-bottom: 1px solid #f0f0f0;
+                            cursor: ${is_already_added ? 'default' : 'pointer'};
+                            background: ${bg}; transition: background .1s;
+                            opacity: ${is_already_added ? '0.65' : '1'};">
+                            ${check_or_added}
                             <div style="flex: 1; min-width: 0;">
                                 <div style="font-weight: 500; font-size: 14px;">
-                                    ${frappe.utils.escape_html(rec.display)}${estado_badge}
+                                    ${frappe.utils.escape_html(rec.display)}${status_badge}
                                 </div>
                                 ${info_html}
                             </div>
@@ -602,7 +625,7 @@ function show_multiselect_dialog(frm, doctype_type) {
                 if (!is_single_select) {
                     list_html += `<div style="padding: 8px 12px; font-size: 12px; color: ${WA_COLORS.grey_text};
                         border-top: 1px solid #eee; font-weight: 500;">
-                        ${selected.size} seleccionado(s) de ${all_records.length}
+                        ${selected.size} seleccionado(s) &nbsp;·&nbsp; ${selectable.length} dispon\u00edvel(is)
                     </div>`;
                 }
 
@@ -614,20 +637,21 @@ function show_multiselect_dialog(frm, doctype_type) {
                     $(window).scrollTop(saved_page_scroll);
                 });
 
-                // Bind Select All / Unselect All
+                // Bind Select All / Unselect All (skip already-added rows)
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-all').on('click', function (e) {
                     e.preventDefault();
-                    filtered.forEach(function (rec) { selected.add(rec.name); });
+                    selectable.forEach(function (rec) { selected.add(rec.name); });
                     render_list();
                 });
                 dialog.fields_dict.list_html.$wrapper.find('.wa-unselect-all').on('click', function (e) {
                     e.preventDefault();
-                    filtered.forEach(function (rec) { selected.delete(rec.name); });
+                    selectable.forEach(function (rec) { selected.delete(rec.name); });
                     render_list();
                 });
 
-                // Bind row clicks
+                // Bind row clicks (ignore already-added rows)
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function () {
+                    if ($(this).data('added') === 1 || $(this).data('added') === '1') return;
                     let name = $(this).data('name');
                     if (is_single_select) {
                         selected.clear();
@@ -642,12 +666,14 @@ function show_multiselect_dialog(frm, doctype_type) {
                     render_list();
                 });
 
-                // Hover effect
+                // Hover effect (skip already-added rows)
                 dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').hover(
                     function () {
+                        if ($(this).data('added') === 1 || $(this).data('added') === '1') return;
                         if (!selected.has($(this).data('name'))) $(this).css('background', '#f9f9f9');
                     },
                     function () {
+                        if ($(this).data('added') === 1 || $(this).data('added') === '1') return;
                         if (!selected.has($(this).data('name'))) $(this).css('background', 'white');
                     }
                 );
