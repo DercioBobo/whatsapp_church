@@ -703,6 +703,12 @@ function show_catechism_picker_dialog(frm, tipo) {
     let has_status_filter = ['Catecumenos', 'Catequistas', 'Turma'].includes(tipo);
     let has_padrinhos = ['Catecumenos', 'Preparacao Sacramento'].includes(tipo);
 
+    let status_options_map = {
+        'Catecumenos': '\nActivo\nPendente\nInativo\nTransferido\nCrismado',
+        'Catequistas': '\nActivo\nInactivo',
+        'Turma':       '\nActivo\nInactivo'
+    };
+
     let selected_name = null;    // null = Todos; string = specific record name
     let selected_display = null; // display label of selected record
     let all_records = [];
@@ -713,7 +719,7 @@ function show_catechism_picker_dialog(frm, tipo) {
             fieldname: 'filtro_status',
             fieldtype: 'Select',
             label: 'Filtrar por Status',
-            options: '\nActivo\nInactivo',
+            options: status_options_map[tipo] || '\nActivo\nInactivo',
             default: 'Activo',
             description: 'Deixe vazio para incluir todos'
         });
