@@ -85,17 +85,17 @@ def _resolve_turma_doc(name):
     recipients = []
     child_table = getattr(doc, "lista_catecumenos", None) or []
     for row in child_table:
+        catecumeno_link = getattr(row, "catecumeno", None)
         raw_contacto = getattr(row, "contacto", None)
-        nome = getattr(row, "nome_completo", None) or getattr(row, "nome", None) or ""
-        if not raw_contacto:
-            catecumeno_link = getattr(row, "catecumeno", None)
-            if catecumeno_link:
-                try:
-                    cat_doc = frappe.get_doc("Catecumeno", catecumeno_link)
+        nome = catecumeno_link or ""
+        if catecumeno_link:
+            try:
+                cat_doc = frappe.get_doc("Catecumeno", catecumeno_link)
+                if not raw_contacto:
                     raw_contacto = getattr(cat_doc, "contacto", None)
-                    nome = nome or getattr(cat_doc, "nome_completo", None) or getattr(cat_doc, "nome", None) or catecumeno_link
-                except frappe.DoesNotExistError:
-                    pass
+                nome = getattr(cat_doc, "nome_completo", None) or getattr(cat_doc, "nome", None) or catecumeno_link
+            except frappe.DoesNotExistError:
+                pass
         for num in parse_contacto(raw_contacto):
             recipients.append({
                 "nome": nome,
@@ -203,10 +203,9 @@ def get_registros_para_dialogo(doctype):
             limit_page_length=0,
             order_by="name asc"
         )
-        # Fetch member names from child table
+        # Fetch member names from child table (only catecumeno link field exists)
         members_rows = frappe.db.sql(
-            """SELECT parent,
-               COALESCE(NULLIF(nome_completo, ''), NULLIF(nome, ''), catecumeno) AS member_name
+            """SELECT parent, catecumeno AS member_name
                FROM `tabTurma Catecumenos`
                ORDER BY parent, idx""",
             as_dict=True

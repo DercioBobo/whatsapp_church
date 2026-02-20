@@ -305,17 +305,17 @@ class AvisoWhatsApp(Document):
                 except frappe.DoesNotExistError:
                     continue
                 for row in (doc.lista_catecumenos or []):
+                    cat_link = getattr(row, "catecumeno", None)
                     raw_contacto = getattr(row, "contacto", None)
-                    nome = getattr(row, "nome_completo", None) or getattr(row, "nome", None) or ""
-                    if not raw_contacto:
-                        cat_link = getattr(row, "catecumeno", None)
-                        if cat_link:
-                            try:
-                                cat_doc = frappe.get_doc("Catecumeno", cat_link)
+                    nome = cat_link or ""
+                    if cat_link:
+                        try:
+                            cat_doc = frappe.get_doc("Catecumeno", cat_link)
+                            if not raw_contacto:
                                 raw_contacto = getattr(cat_doc, "contacto", None)
-                                nome = nome or getattr(cat_doc, "nome_completo", None) or getattr(cat_doc, "nome", None) or cat_link
-                            except frappe.DoesNotExistError:
-                                pass
+                            nome = getattr(cat_doc, "nome_completo", None) or getattr(cat_doc, "nome", None) or cat_link
+                        except frappe.DoesNotExistError:
+                            pass
                     for num in parse_contacto(raw_contacto):
                         recipients.append({"nome": nome, "contacto": num, "origem": "Turma", "doc": row})
 
