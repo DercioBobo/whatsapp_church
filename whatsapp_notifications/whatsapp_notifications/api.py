@@ -94,20 +94,20 @@ def make_http_request(url, method="POST", headers=None, data=None):
 def send_whatsapp(phone, message, doctype=None, docname=None, queue=True):
     """
     Send a WhatsApp message via Evolution API
-    
+
     This is the main entry point for sending WhatsApp messages.
     Can be called from client-side JavaScript or server-side Python.
-    
+
     Args:
         phone: Recipient phone number
         message: Message content
         doctype: Optional reference DocType
         docname: Optional reference document name
         queue: If True, queue for background processing (default)
-    
+
     Returns:
         dict: Result with success status
-    
+
     Example:
         frappe.call({
             method: 'whatsapp_notifications.whatsapp_notifications.api.send_whatsapp',
@@ -120,7 +120,10 @@ def send_whatsapp(phone, message, doctype=None, docname=None, queue=True):
     from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
     from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_message_log.whatsapp_message_log import create_message_log
     from whatsapp_notifications.whatsapp_notifications.utils import format_phone_number
-    
+
+    # Normalize queue: JS passes boolean false as string "false" via frappe.call
+    queue = frappe.utils.cint(queue)
+
     # Validate inputs
     if not phone or not message:
         return {"success": False, "error": _("Phone and message are required")}
@@ -434,6 +437,9 @@ def send_whatsapp_media(phone, doctype=None, docname=None, file_url=None,
     from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
     from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_message_log.whatsapp_message_log import create_message_log
     from whatsapp_notifications.whatsapp_notifications.utils import format_phone_number
+
+    # Normalize queue: JS passes boolean false as string "false" via frappe.call
+    queue = frappe.utils.cint(queue)
 
     # Validate inputs
     if not phone:

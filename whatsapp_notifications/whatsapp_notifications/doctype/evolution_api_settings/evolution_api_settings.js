@@ -24,12 +24,10 @@ function _load_phone_fields(frm, cdt, cdn, doctype) {
         args: { doctype: doctype },
         callback: function(r) {
             if (r.message && r.message.success) {
-                let phone_fields = r.message.fields
-                    .filter(function(f) { return ['Data', 'Phone'].includes(f.fieldtype); });
-                let options = [''].concat(phone_fields.map(function(f) {
+                // Show all fields; value stored is fieldname only so the doc lookup works
+                let options = [''].concat(r.message.fields.map(function(f) {
                     return f.fieldname;
                 }));
-                // Set options on the global docfield (applies to all rows in this session)
                 let df = frappe.meta.get_docfield('WhatsApp Media DocType', 'phone_field');
                 if (df) {
                     df.options = options.join('\n');
