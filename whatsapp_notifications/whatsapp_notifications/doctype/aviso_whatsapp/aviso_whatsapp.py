@@ -482,10 +482,12 @@ class AvisoWhatsApp(Document):
         return recipients
 
     def _render_mensagem(self, dest):
-        """Render message with optional Jinja2 template substitution."""
+        """Render message with Jinja2 template substitution when variables are present."""
         if not self.mensagem:
             return ""
-        if not self.usar_template:
+        # Always render when the message contains template syntax,
+        # regardless of the usar_template checkbox.
+        if not self.usar_template and "{{" not in self.mensagem:
             return self.mensagem
         try:
             doc_obj = dest.get("doc")
