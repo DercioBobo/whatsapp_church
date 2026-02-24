@@ -24,6 +24,27 @@ def parse_contacto(raw):
     return numbers
 
 
+def normalize_mz_number(num):
+    """Auto-prepend MZ country code (258) if not already present."""
+    n = num.strip().replace(" ", "").replace("-", "")
+    if not n:
+        return n
+    if n.startswith("+258"):
+        return "258" + n[4:]
+    if n.startswith("258"):
+        return n
+    return "258" + n
+
+
+@frappe.whitelist()
+def preview_fonte_destinatarios(fonte_json):
+    """Return resolved phone numbers for a single fonte definition (preview before saving)."""
+    fonte = frappe._dict(json.loads(fonte_json))
+    doc = frappe.new_doc("Aviso WhatsApp")
+    recipients = doc._resolver_fonte(fonte)
+    return [{"nome": r.get("nome", ""), "contacto": r.get("contacto", "")} for r in recipients]
+
+
 @frappe.whitelist()
 def get_doctype_phone_fields(doctype):
     """Return Data/Phone field names for the given DocType (used in JS picker)."""
@@ -384,7 +405,7 @@ class AvisoWhatsApp(Document):
         elif tipo == "Numeros Manuais":
             raw = (fonte.numeros or "").replace(",", "\n").replace(";", "\n")
             for line in raw.split("\n"):
-                num = line.strip()
+                num = normalize_mz_number(line.strip())
                 if num:
                     recipients.append({"nome": "", "contacto": num, "origem": "Manual", "doc": None})
 

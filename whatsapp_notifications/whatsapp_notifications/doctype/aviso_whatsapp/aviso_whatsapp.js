@@ -218,27 +218,42 @@ function render_destinatarios_area(frm) {
 
     if (fontes.length > 0) {
         html += `<div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">`;
-        fontes.forEach(function (fonte, idx) {
+        fontes.forEach(function (fonte) {
             let icon = tipo_icons[fonte.tipo_fonte] || '&#128203;';
             let descricao = fonte.descricao || fonte.tipo_fonte;
+            let can_preview = fonte.tipo_fonte !== 'Grupo WhatsApp';
             html += `
-            <div class="wa-fonte-card" style="display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-                background: white; border: 1px solid #e0e0e0; border-radius: 10px;
-                border-left: 4px solid ${WA_COLORS.teal};">
-                <span style="font-size: 20px;">${icon}</span>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 13px; color: ${WA_COLORS.teal};">
-                        ${frappe.utils.escape_html(fonte.tipo_fonte)}
+            <div class="wa-fonte-wrapper" style="border-radius: 10px; overflow: hidden;
+                border: 1px solid #e0e0e0; border-left: 4px solid ${WA_COLORS.teal};">
+                <div class="wa-fonte-card"
+                    data-name="${frappe.utils.escape_html(fonte.name || '')}"
+                    data-tipo="${frappe.utils.escape_html(fonte.tipo_fonte || '')}"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+                    background: white; ${can_preview ? 'cursor: pointer;' : ''}">
+                    <span style="font-size: 20px;">${icon}</span>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 13px; color: ${WA_COLORS.teal};">
+                            ${frappe.utils.escape_html(fonte.tipo_fonte)}
+                        </div>
+                        <div style="font-size: 11px; color: ${WA_COLORS.grey_text}; white-space: nowrap;
+                            overflow: hidden; text-overflow: ellipsis;">
+                            ${frappe.utils.escape_html(descricao)}
+                        </div>
                     </div>
-                    <div style="font-size: 11px; color: ${WA_COLORS.grey_text}; white-space: nowrap;
-                        overflow: hidden; text-overflow: ellipsis;">
-                        ${frappe.utils.escape_html(descricao)}
-                    </div>
+                    ${can_preview ? `<span class="wa-fonte-expand-icon"
+                        style="color: ${WA_COLORS.grey_text}; font-size: 11px; flex-shrink: 0;
+                        user-select: none; padding: 0 2px;">&#9660;</span>` : ''}
+                    ${is_editable ? `<button class="wa-fonte-remove"
+                        data-name="${frappe.utils.escape_html(fonte.name || '')}"
+                        style="border: none; background: none; color: #ccc; font-size: 18px;
+                        cursor: pointer; line-height: 1; padding: 0 4px; flex-shrink: 0;"
+                        title="Remover fonte">&times;</button>` : ''}
                 </div>
-                ${is_editable ? `<button class="wa-fonte-remove" data-idx="${fonte.idx || idx}"
-                    style="border: none; background: none; color: #ccc; font-size: 18px;
-                    cursor: pointer; line-height: 1; padding: 0 4px; flex-shrink: 0;"
-                    title="Remover fonte">&times;</button>` : ''}
+                ${can_preview ? `
+                <div class="wa-fonte-preview-area" style="display: none; padding: 8px 14px;
+                    background: #f8fffe; border-top: 1px solid #e0e0e0;
+                    max-height: 200px; overflow-y: auto; font-size: 12px;">
+                </div>` : ''}
             </div>`;
         });
         html += '</div>';
@@ -267,20 +282,83 @@ function render_destinatarios_area(frm) {
     html += '</div>';
     frm.fields_dict.destinatarios_html.$wrapper.html(html);
 
+    let $wd = frm.fields_dict.destinatarios_html.$wrapper;
+
     if (is_editable) {
-        let $w = frm.fields_dict.destinatarios_html.$wrapper;
-        $w.find('.wa-add-fonte-btn').on('click', function () {
+        $wd.find('.wa-add-fonte-btn').on('click', function () {
             show_add_fonte_dialog(frm);
         });
-        $w.find('.wa-fonte-remove').on('click', function () {
-            let idx = parseInt($(this).data('idx'));
-            frm.doc.fontes = (frm.doc.fontes || []).filter(f => f.idx !== idx);
+        $wd.find('.wa-fonte-remove').on('click', function (e) {
+            e.stopPropagation();
+            let row_name = $(this).data('name');
+            // Remove from Frappe model locals
+            if (frappe.model.locals && frappe.model.locals['Aviso WhatsApp Fonte']) {
+                delete frappe.model.locals['Aviso WhatsApp Fonte'][row_name];
+            }
+            frm.doc.fontes = (frm.doc.fontes || []).filter(f => f.name !== row_name);
             frm.doc.fontes.forEach((f, i) => f.idx = i + 1);
             frm.dirty();
-            frm.refresh_fields();
+            frm.refresh_field('fontes');
             render_destinatarios_area(frm);
         });
     }
+
+    // Preview handler — always active, not just when editable
+    $wd.find('.wa-fonte-card').on('click', function (e) {
+        if ($(e.target).hasClass('wa-fonte-remove') || $(e.target).closest('.wa-fonte-remove').length) return;
+        let tipo = $(this).data('tipo');
+        if (!tipo || tipo === 'Grupo WhatsApp') return;
+
+        let $card = $(this);
+        let $preview = $card.closest('.wa-fonte-wrapper').find('.wa-fonte-preview-area');
+        let $icon = $card.find('.wa-fonte-expand-icon');
+
+        if ($preview.is(':visible')) {
+            $preview.slideUp(150);
+            $icon.html('&#9660;');
+            return;
+        }
+        $icon.html('&#9650;');
+        $preview.slideDown(150);
+        if ($preview.data('loaded')) return;
+
+        $preview.html('<div style="color: ' + WA_COLORS.grey_text + '; padding: 4px 0;">A carregar...</div>');
+
+        let row_name = $card.data('name');
+        let fonte_row = (frm.doc.fontes || []).find(function (f) { return f.name === row_name; });
+        if (!fonte_row) {
+            $preview.html('<div style="color: red;">Erro: fonte não encontrada.</div>');
+            return;
+        }
+
+        let fonte_data = {};
+        ['tipo_fonte','filtro_status','nome_registo','incluir_padrinhos',
+         'numeros','doctype_fonte','campo_contacto','usar_child_table',
+         'child_table_field','campo_contacto_child','filtro_campo','filtro_valor'
+        ].forEach(function (k) { fonte_data[k] = fonte_row[k] || ''; });
+
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.preview_fonte_destinatarios',
+            args: { fonte_json: JSON.stringify(fonte_data) },
+            callback: function (r) {
+                let recipients = r.message || [];
+                $preview.data('loaded', true);
+                if (!recipients.length) {
+                    $preview.html('<div style="color: ' + WA_COLORS.grey_text + '; padding: 4px 0;">Nenhum número encontrado.</div>');
+                    return;
+                }
+                let out = '<div style="font-weight: 600; color: ' + WA_COLORS.teal + '; margin-bottom: 6px;">' +
+                    recipients.length + ' número(s)</div>';
+                out += recipients.map(function (rec) {
+                    let nome_part = rec.nome ? '<span style="color: #555;">' + frappe.utils.escape_html(rec.nome) + '</span> &mdash; ' : '';
+                    return '<div style="padding: 3px 0; border-bottom: 1px solid #edf0f2;">' +
+                        nome_part +
+                        '<code style="font-size: 11px; color: ' + WA_COLORS.teal + ';">' + frappe.utils.escape_html(rec.contacto) + '</code></div>';
+                }).join('');
+                $preview.html(out);
+            }
+        });
+    });
 }
 
 // ============================================================
@@ -1052,7 +1130,7 @@ function show_manual_fonte_dialog(frm) {
                 fieldtype: 'Small Text',
                 label: 'N\u00fameros de Telefone',
                 reqd: 1,
-                description: 'Um n\u00famero por linha, ou separados por v\u00edrgula. Incluir c\u00f3digo do pa\u00eds (258).'
+                description: 'Um n\u00famero por linha, ou separados por v\u00edrgula. O c\u00f3digo 258 ser\u00e1 adicionado automaticamente.'
             },
             {
                 fieldname: 'hint_html',
@@ -1074,16 +1152,16 @@ function show_manual_fonte_dialog(frm) {
 
     dialog.fields_dict.hint_html.$wrapper.html(`
     <div style="padding: 8px 0; font-size: 12px; color: ${WA_COLORS.grey_text};">
-        <strong>Exemplos de formato:</strong>
+        <strong>Exemplos de formato (sem c\u00f3digo do pa\u00eds):</strong>
         <div style="font-family: monospace; background: #f5f6f7; border-radius: 6px;
             padding: 8px 12px; margin-top: 6px; line-height: 1.8;">
-            258840000000<br>
-            258860000000<br>
-            258870000000
+            840000000<br>
+            860000000<br>
+            870000000
         </div>
         <div style="margin-top: 6px;">
+            O c\u00f3digo <strong>258</strong> \u00e9 adicionado automaticamente.<br>
             Prefixos Mo\u00e7ambique: <strong>84</strong>, <strong>85</strong>, <strong>86</strong>, <strong>87</strong>, <strong>82</strong>, <strong>83</strong>
-            (sempre com c\u00f3digo pa\u00eds <strong>258</strong>)
         </div>
     </div>`);
 
@@ -1091,7 +1169,7 @@ function show_manual_fonte_dialog(frm) {
     dialog.show();
     setTimeout(function () {
         dialog.fields_dict.numeros.$input &&
-            dialog.fields_dict.numeros.$input.attr('placeholder', '258840123456\n258860123456\n258870123456');
+            dialog.fields_dict.numeros.$input.attr('placeholder', '840123456\n860123456\n870123456');
     }, 100);
 }
 
@@ -1244,11 +1322,15 @@ function build_descricao(tipo, values) {
 }
 
 function add_fonte_to_frm(frm, fonte_data) {
-    if (!frm.doc.fontes) frm.doc.fontes = [];
-    let next_idx = (frm.doc.fontes.reduce((m, f) => Math.max(m, f.idx || 0), 0)) + 1;
-    frm.doc.fontes.push(Object.assign({ idx: next_idx, doctype: 'Aviso WhatsApp Fonte' }, fonte_data));
+    // Use frappe.model.add_child so the row is registered in frappe.model.locals
+    // and frm.save() can properly serialize it.
+    let row = frappe.model.add_child(frm.doc, 'Aviso WhatsApp Fonte', 'fontes');
+    let frappe_keys = new Set(['doctype', 'name', 'idx', 'parenttype', 'parentfield', 'parent', '__islocal', '__unsaved']);
+    Object.entries(fonte_data).forEach(function ([k, v]) {
+        if (!frappe_keys.has(k)) row[k] = v;
+    });
     frm.dirty();
-    frm.refresh_fields();
+    frm.refresh_field('fontes');
     render_destinatarios_area(frm);
     frappe.show_alert({ message: __('Fonte adicionada.'), indicator: 'green' }, 3);
 }
