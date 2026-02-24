@@ -514,10 +514,16 @@ function render_agendamento_area(frm) {
         let $w = frm.fields_dict.agendamento_html.$wrapper;
 
         $w.find('.wa-tipo-btn').on('click', function () {
-            frm.set_value('tipo_envio', $(this).data('tipo'));
-            frm.dirty();
-            render_agendamento_area(frm);
-            render_acoes_area(frm);
+            let tipo = $(this).data('tipo');
+            if (tipo === 'Agora' && frm.doc.tipo_envio === 'Agora') {
+                // Already in "Agora" mode — this click should send immediately
+                do_enviar_agora(frm);
+            } else {
+                frm.set_value('tipo_envio', tipo);
+                frm.dirty();
+                render_agendamento_area(frm);
+                render_acoes_area(frm);
+            }
         });
 
         $w.find('.wa-modo-btn').on('click', function () {

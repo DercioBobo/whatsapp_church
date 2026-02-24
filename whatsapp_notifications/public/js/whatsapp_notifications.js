@@ -286,10 +286,7 @@ frappe.whatsapp.compose_media = function(options = {}) {
         let attachments = attachments_result.success ? attachments_result.attachments : [];
 
         // Build send type options with clearer labels
-        let send_type_options = [];
-
-        // Always add Document PDF option
-        send_type_options.push('Document PDF');
+        let send_type_options = ['Text', 'Document PDF'];
 
         // Add attachment option if there are attachments
         if (attachments.length > 0) {
@@ -304,8 +301,8 @@ frappe.whatsapp.compose_media = function(options = {}) {
         // Build print format options
         let pf_options = print_formats.map(p => p.name);
 
-        // Default to first available option
-        let default_send_type = send_type_options[0] || 'Document PDF';
+        // Default to Document PDF (most common use case for the button)
+        let default_send_type = 'Document PDF';
 
         let dialog = new frappe.ui.Dialog({
             title: __('Send via WhatsApp'),
@@ -327,9 +324,18 @@ frappe.whatsapp.compose_media = function(options = {}) {
                     default: default_send_type,
                     onchange: function() {
                         let val = dialog.get_value('send_type');
+                        dialog.set_df_property('text_message', 'hidden', val !== 'Text');
                         dialog.set_df_property('print_format', 'hidden', val !== 'Document PDF');
                         dialog.set_df_property('attachment', 'hidden', val !== 'Attached File');
+                        dialog.set_df_property('caption', 'hidden', val === 'Text');
                     }
+                },
+                {
+                    fieldname: 'text_message',
+                    fieldtype: 'Small Text',
+                    label: __('Message'),
+                    hidden: 1,
+                    depends_on: "eval:doc.send_type=='Text'"
                 },
                 {
                     fieldname: 'print_format',
@@ -360,11 +366,40 @@ frappe.whatsapp.compose_media = function(options = {}) {
             primary_action: function(values) {
                 dialog.get_primary_btn().prop('disabled', true).html(__('Sending...'));
 
+                if (values.send_type === 'Text') {
+                    frappe.call({
+                        method: 'whatsapp_notifications.whatsapp_notifications.api.send_whatsapp',
+                        args: {
+                            phone: values.phone,
+                            message: values.text_message || '',
+                            doctype: doctype,
+                            docname: docname,
+                            queue: false
+                        },
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                dialog.hide();
+                                frappe.show_alert({ message: __('WhatsApp message sent successfully'), indicator: 'green' }, 5);
+                                if (options.callback) options.callback();
+                            } else {
+                                dialog.get_primary_btn().prop('disabled', false).html(__('Send WhatsApp'));
+                                frappe.msgprint({
+                                    title: __('WhatsApp Error'),
+                                    indicator: 'red',
+                                    message: (r.message && r.message.error) || __('Failed to send message')
+                                });
+                            }
+                        }
+                    });
+                    return;
+                }
+
                 let media_options = {
                     phone: values.phone,
                     doctype: doctype,
                     docname: docname,
                     caption: values.caption,
+                    queue: false,
                     callback: function() {
                         dialog.hide();
                         frappe.show_alert({
@@ -395,8 +430,10 @@ frappe.whatsapp.compose_media = function(options = {}) {
         // Update visibility based on initial selection
         setTimeout(function() {
             let val = dialog.get_value('send_type');
+            dialog.set_df_property('text_message', 'hidden', val !== 'Text');
             dialog.set_df_property('print_format', 'hidden', val !== 'Document PDF');
             dialog.set_df_property('attachment', 'hidden', val !== 'Attached File');
+            dialog.set_df_property('caption', 'hidden', val === 'Text');
         }, 100);
     });
 };
