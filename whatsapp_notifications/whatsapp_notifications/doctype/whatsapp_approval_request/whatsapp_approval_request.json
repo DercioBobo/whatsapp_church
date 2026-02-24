@@ -1,7 +1,7 @@
 {
     "actions": [],
     "allow_rename": 0,
-    "autoname": "WAAPPR-.#####",
+    "autoname": "WAAPPR-.YY.-.##",
     "creation": "2024-01-01 00:00:00.000000",
     "doctype": "DocType",
     "engine": "InnoDB",
