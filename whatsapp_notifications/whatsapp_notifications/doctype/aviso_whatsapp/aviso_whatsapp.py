@@ -36,6 +36,59 @@ def normalize_mz_number(num):
     return "258" + n
 
 
+def _parse_numero_nome(line):
+    """
+    Parse a single input line into (phone_string, name_string).
+
+    Supported formats (checked in order):
+      848888888 Joao          space separator  — name must contain a letter
+      848888888 - Maria       dash separator   — "number - name"
+      848888888,Ana           comma separator  — name must contain a letter
+      848888888\tPedro        tab separator
+      848888888               number only      — name is ''
+
+    Returns (None, '') for blank lines.
+    Backward-compatible: "848888888,858888888" (two bare numbers, no letters after comma)
+    is returned as ('848888888,858888888', '') so the caller can split on comma.
+    """
+    import re
+    line = line.strip()
+    if not line:
+        return None, ''
+
+    # 1. Tab separator (unambiguous)
+    if '\t' in line:
+        parts = line.split('\t', 1)
+        return parts[0].strip(), parts[1].strip()
+
+    # 2. " - " separator (space-dash-space): "number - name"
+    if ' - ' in line:
+        idx = line.index(' - ')
+        num_part = line[:idx].strip()
+        name_part = line[idx + 3:].strip()
+        if num_part and name_part:
+            return num_part, name_part
+
+    # 3. Comma separator — only when the part after the comma contains a letter
+    if ',' in line:
+        idx = line.index(',')
+        after = line[idx + 1:].strip()
+        if re.search(r'[a-zA-Z\u00C0-\u00FF]', after):
+            return line[:idx].strip(), after
+
+    # 4. Space separator — first token must be 7+ pure digits (+ optional leading +/258)
+    #    and the rest must contain at least one letter (otherwise it's part of the number)
+    parts = line.split(None, 1)
+    if len(parts) == 2:
+        first, rest = parts[0], parts[1].strip()
+        first_digits = re.sub(r'[+\s]', '', first)
+        if first_digits.isdigit() and len(first_digits) >= 7 and re.search(r'[a-zA-Z\u00C0-\u00FF]', rest):
+            return first, rest
+
+    # No name found — entire line is the number
+    return line, ''
+
+
 @frappe.whitelist()
 def preview_fonte_destinatarios(fonte_json):
     """Return resolved phone numbers for a single fonte definition (preview before saving)."""
@@ -403,11 +456,24 @@ class AvisoWhatsApp(Document):
                 frappe.log_error(message=str(e), title="Aviso WhatsApp - Resolver DocType")
 
         elif tipo == "Numeros Manuais":
-            raw = (fonte.numeros or "").replace(",", "\n").replace(";", "\n")
+            raw = fonte.numeros or ""
             for line in raw.split("\n"):
-                num = normalize_mz_number(line.strip())
-                if num:
-                    recipients.append({"nome": "", "contacto": num, "origem": "Manual", "doc": None})
+                line = line.strip()
+                if not line:
+                    continue
+                num_str, owner = _parse_numero_nome(line)
+                if num_str is None:
+                    continue
+                # No name detected — check for legacy comma/semicolon-separated numbers
+                if not owner and ("," in num_str or ";" in num_str):
+                    for sub in num_str.replace(";", ",").split(","):
+                        n = normalize_mz_number(sub.strip())
+                        if n:
+                            recipients.append({"nome": "", "contacto": n, "number_owner": "", "origem": "Manual", "doc": None})
+                else:
+                    n = normalize_mz_number(num_str)
+                    if n:
+                        recipients.append({"nome": owner, "contacto": n, "number_owner": owner, "origem": "Manual", "doc": None})
 
         elif tipo == "Grupo WhatsApp":
             if fonte.grupo_id:
@@ -427,6 +493,7 @@ class AvisoWhatsApp(Document):
                 "nome": dest.get("nome", ""),
                 "contacto": dest.get("contacto", ""),
                 "origem": dest.get("origem", ""),
+                "number_owner": dest.get("number_owner", dest.get("nome", "")),
                 "doc": doc_obj
             }
             return frappe.render_template(self.mensagem, context)

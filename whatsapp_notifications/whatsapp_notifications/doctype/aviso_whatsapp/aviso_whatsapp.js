@@ -1136,7 +1136,7 @@ function show_manual_fonte_dialog(frm) {
                 fieldtype: 'Small Text',
                 label: 'N\u00fameros de Telefone',
                 reqd: 1,
-                description: 'Um n\u00famero por linha, ou separados por v\u00edrgula. O c\u00f3digo 258 ser\u00e1 adicionado automaticamente.'
+                description: 'Um n\u00famero por linha. Pode incluir um nome opcional ap\u00f3s o n\u00famero (ex: <code>840123456 Jo\u00e3o</code>). O c\u00f3digo 258 \u00e9 adicionado automaticamente.'
             },
             {
                 fieldname: 'hint_html',
@@ -1148,26 +1148,38 @@ function show_manual_fonte_dialog(frm) {
             if (!values.numeros || !values.numeros.trim()) return;
             dialog.hide();
             let lines = values.numeros.split('\n').filter(l => l.trim());
+            let named = lines.filter(function(l) {
+                let t = l.trim();
+                if (t.includes('\t')) return true;
+                if (t.includes(' - ')) return true;
+                let ci = t.indexOf(',');
+                if (ci >= 0 && /[a-zA-Z\u00C0-\u00FF]/.test(t.slice(ci + 1))) return true;
+                let p = t.split(/\s+/);
+                return p.length >= 2 && /^[\d+]{7,}$/.test(p[0].replace(/[+]/g,'')) && /[a-zA-Z\u00C0-\u00FF]/.test(p.slice(1).join(' '));
+            }).length;
+            let descricao = lines.length + ' n\u00famero(s) manual(is)';
+            if (named > 0) descricao += ', ' + named + ' com nome';
             add_fonte_to_frm(frm, {
                 tipo_fonte: 'Numeros Manuais',
                 numeros: values.numeros,
-                descricao: lines.length + ' n\u00famero(s) manual(is)'
+                descricao: descricao
             });
         }
     });
 
     dialog.fields_dict.hint_html.$wrapper.html(`
     <div style="padding: 8px 0; font-size: 12px; color: ${WA_COLORS.grey_text};">
-        <strong>Exemplos de formato (sem c\u00f3digo do pa\u00eds):</strong>
+        <strong>Formatos suportados:</strong>
         <div style="font-family: monospace; background: #f5f6f7; border-radius: 6px;
             padding: 8px 12px; margin-top: 6px; line-height: 1.8;">
             840000000<br>
-            860000000<br>
-            870000000
+            860000001 Maria<br>
+            870000002 - Jo\u00e3o<br>
+            880000003,Ana
         </div>
         <div style="margin-top: 6px;">
-            O c\u00f3digo <strong>258</strong> \u00e9 adicionado automaticamente.<br>
-            Prefixos Mo\u00e7ambique: <strong>84</strong>, <strong>85</strong>, <strong>86</strong>, <strong>87</strong>, <strong>82</strong>, <strong>83</strong>
+            O nome \u00e9 <strong>opcional</strong>. Se fornecido, fica dispon\u00edvel como <code>{{ number_owner }}</code> na mensagem.<br>
+            O c\u00f3digo <strong>258</strong> \u00e9 adicionado automaticamente.
         </div>
     </div>`);
 
@@ -1175,7 +1187,7 @@ function show_manual_fonte_dialog(frm) {
     dialog.show();
     setTimeout(function () {
         dialog.fields_dict.numeros.$input &&
-            dialog.fields_dict.numeros.$input.attr('placeholder', '840123456\n860123456\n870123456');
+            dialog.fields_dict.numeros.$input.attr('placeholder', '840123456\n860123456 Maria\n870123456 - Jo\u00e3o');
     }, 100);
 }
 
@@ -1321,8 +1333,19 @@ function build_descricao(tipo, values) {
         return base;
     }
     if (tipo === 'Numeros Manuais') {
-        let count = (values.numeros || '').split('\n').filter(l => l.trim()).length;
-        return count + ' n\u00famero(s)';
+        let lines = (values.numeros || '').split('\n').filter(l => l.trim());
+        let named = lines.filter(function(l) {
+            let t = l.trim();
+            if (t.includes('\t')) return true;
+            if (t.includes(' - ')) return true;
+            let ci = t.indexOf(',');
+            if (ci >= 0 && /[a-zA-Z\u00C0-\u00FF]/.test(t.slice(ci + 1))) return true;
+            let p = t.split(/\s+/);
+            return p.length >= 2 && /^[\d+]{7,}$/.test(p[0].replace(/[+]/g,'')) && /[a-zA-Z\u00C0-\u00FF]/.test(p.slice(1).join(' '));
+        }).length;
+        let label = lines.length + ' n\u00famero(s)';
+        if (named > 0) label += ', ' + named + ' com nome';
+        return label;
     }
     return tipo;
 }
