@@ -1,6 +1,45 @@
 // Copyright (c) 2024, Entretech and contributors
 // For license information, please see license.txt
 
+// ── Child table: auto-populate phone_field options when document_type changes ──
+frappe.ui.form.on('WhatsApp Media DocType', {
+    form_render: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (row.document_type) {
+            _load_phone_fields(frm, cdt, cdn, row.document_type);
+        }
+    },
+    document_type: function(frm, cdt, cdn) {
+        frappe.model.set_value(cdt, cdn, 'phone_field', '');
+        let row = locals[cdt][cdn];
+        if (row.document_type) {
+            _load_phone_fields(frm, cdt, cdn, row.document_type);
+        }
+    }
+});
+
+function _load_phone_fields(frm, cdt, cdn, doctype) {
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.api.get_doctype_fields',
+        args: { doctype: doctype },
+        callback: function(r) {
+            if (r.message && r.message.success) {
+                let phone_fields = r.message.fields
+                    .filter(function(f) { return ['Data', 'Phone'].includes(f.fieldtype); });
+                let options = [''].concat(phone_fields.map(function(f) {
+                    return f.fieldname;
+                }));
+                // Set options on the global docfield (applies to all rows in this session)
+                let df = frappe.meta.get_docfield('WhatsApp Media DocType', 'phone_field');
+                if (df) {
+                    df.options = options.join('\n');
+                }
+                frm.refresh_field('media_doctypes');
+            }
+        }
+    });
+}
+
 frappe.ui.form.on('Evolution API Settings', {
     refresh: function(frm) {
         // Generate and display webhook URL

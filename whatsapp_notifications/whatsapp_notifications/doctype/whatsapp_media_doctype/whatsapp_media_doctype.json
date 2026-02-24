@@ -22,10 +22,10 @@
         },
         {
             "fieldname": "phone_field",
-            "fieldtype": "Data",
+            "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Phone Field",
-            "description": "Field name containing recipient phone (e.g., contact_mobile, mobile_no, phone). Supports dot notation for linked docs (e.g., customer.mobile_no)"
+            "description": "Select the field containing the recipient phone number (populated after selecting Document Type)"
         },
         {
             "fieldname": "default_print_format",

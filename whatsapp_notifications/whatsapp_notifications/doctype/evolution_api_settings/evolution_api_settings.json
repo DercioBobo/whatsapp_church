@@ -239,15 +239,15 @@
         {
             "fieldname": "section_media",
             "fieldtype": "Section Break",
-            "label": "WhatsApp Media Button",
-            "description": "Configure which DocTypes show the 'Send via WhatsApp' button"
+            "label": "WhatsApp Button",
+            "description": "Configure which DocTypes show the 'Send via WhatsApp' button (text message, document PDF or attachment)"
         },
         {
             "fieldname": "media_doctypes",
             "fieldtype": "Table",
             "label": "Enabled DocTypes",
             "options": "WhatsApp Media DocType",
-            "description": "Add DocTypes that should have the WhatsApp media button"
+            "description": "Add DocTypes that should have the WhatsApp button"
         },
         {
             "fieldname": "section_maintenance",

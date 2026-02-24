@@ -14,6 +14,10 @@ frappe.ui.form.on('WhatsApp Message Log', {
         }
         
         if (frm.doc.status === 'Pending' || frm.doc.status === 'Queued') {
+            frm.add_custom_button(__('Send Now'), function() {
+                force_send_message(frm);
+            }).addClass('btn-primary');
+
             frm.add_custom_button(__('Cancel'), function() {
                 cancel_message(frm);
             }).addClass('btn-danger');
@@ -45,6 +49,34 @@ function set_status_indicator(frm) {
     
     let indicator = indicator_map[frm.doc.status] || 'gray';
     frm.page.set_indicator(__(frm.doc.status), indicator);
+}
+
+function force_send_message(frm) {
+    frappe.confirm(
+        __('Send this message now, bypassing the queue?'),
+        function() {
+            frm.call({
+                method: 'force_send',
+                doc: frm.doc,
+                freeze: true,
+                freeze_message: __('Sending message...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: __('Message sent successfully'),
+                            indicator: 'green'
+                        }, 5);
+                    } else {
+                        frappe.show_alert({
+                            message: (r.message && r.message.error) || __('Send failed — check error message'),
+                            indicator: 'red'
+                        }, 8);
+                    }
+                    frm.reload_doc();
+                }
+            });
+        }
+    );
 }
 
 function retry_message(frm) {

@@ -44,16 +44,31 @@ class WhatsAppMessageLog(Document):
         return {"success": True, "message": _("Message queued for retry")}
     
     @frappe.whitelist()
+    def force_send(self):
+        """
+        Force send a Pending or Queued message immediately, bypassing the queue.
+        """
+        if self.status not in ("Pending", "Queued"):
+            frappe.throw(_("Only Pending or Queued messages can be force sent"))
+
+        if self.message_type in ("Media", "Document"):
+            from whatsapp_notifications.whatsapp_notifications.api import process_media_message_log
+            return process_media_message_log(self.name)
+        else:
+            from whatsapp_notifications.whatsapp_notifications.api import process_message_log
+            return process_message_log(self.name)
+
+    @frappe.whitelist()
     def cancel_message(self):
         """
         Cancel a pending message
         """
         if self.status not in ("Pending", "Queued"):
             frappe.throw(_("Only pending or queued messages can be cancelled"))
-        
+
         self.status = "Cancelled"
         self.save(ignore_permissions=True)
-        
+
         return {"success": True, "message": _("Message cancelled")}
     
     def mark_sent(self, response_data=None, response_id=None):
