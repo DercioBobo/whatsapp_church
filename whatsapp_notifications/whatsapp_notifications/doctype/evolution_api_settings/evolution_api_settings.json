@@ -38,6 +38,8 @@
         "queue_enabled",
         "section_media",
         "media_doctypes",
+        "section_groups",
+        "group_doctypes",
         "section_maintenance",
         "clear_logs_html",
         "clear_message_logs",
@@ -248,6 +250,19 @@
             "label": "Enabled DocTypes",
             "options": "WhatsApp Media DocType",
             "description": "Add DocTypes that should have the WhatsApp button"
+        },
+        {
+            "fieldname": "section_groups",
+            "fieldtype": "Section Break",
+            "label": "WhatsApp Groups",
+            "description": "Configure which DocTypes show the 'Criar Grupo WhatsApp' button, and specify which child table contains the members"
+        },
+        {
+            "fieldname": "group_doctypes",
+            "fieldtype": "Table",
+            "label": "Group Creation DocTypes",
+            "options": "WhatsApp Group DocType Config",
+            "description": "Add DocTypes that support automatic WhatsApp group creation from their child tables"
         },
         {
             "fieldname": "section_maintenance",

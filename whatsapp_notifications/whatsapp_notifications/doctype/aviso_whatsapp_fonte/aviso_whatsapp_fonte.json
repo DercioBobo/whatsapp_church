@@ -22,6 +22,7 @@
         "section_manual",
         "numeros",
         "section_grupo",
+        "grupo_whatsapp",
         "grupo_id",
         "grupo_nome"
     ],
@@ -127,9 +128,17 @@
             "collapsible": 1
         },
         {
+            "fieldname": "grupo_whatsapp",
+            "fieldtype": "Link",
+            "options": "WhatsApp Grupo",
+            "label": "Grupo Guardado",
+            "description": "Seleccione um grupo criado e guardado no sistema"
+        },
+        {
             "fieldname": "grupo_id",
             "fieldtype": "Data",
-            "label": "ID do Grupo (JID)"
+            "label": "ID do Grupo (JID)",
+            "description": "Alternativa: cole o JID directamente (ex: 120363...@g.us)"
         },
         {
             "fieldname": "grupo_nome",

@@ -38,6 +38,81 @@ function _load_phone_fields(frm, cdt, cdn, doctype) {
     });
 }
 
+// ── Child table: auto-populate child_table_field and phone_field for group config ──
+frappe.ui.form.on('WhatsApp Group DocType Config', {
+    form_render: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (row.document_type) {
+            _load_group_child_tables(frm, cdt, cdn, row.document_type);
+        }
+    },
+    document_type: function(frm, cdt, cdn) {
+        frappe.model.set_value(cdt, cdn, 'child_table_field', '');
+        frappe.model.set_value(cdt, cdn, 'phone_field', '');
+        let row = locals[cdt][cdn];
+        if (row.document_type) {
+            _load_group_child_tables(frm, cdt, cdn, row.document_type);
+        }
+    },
+    child_table_field: function(frm, cdt, cdn) {
+        frappe.model.set_value(cdt, cdn, 'phone_field', '');
+        let row = locals[cdt][cdn];
+        if (row.document_type && row.child_table_field) {
+            _load_group_phone_fields(frm, cdt, cdn, row.document_type, row.child_table_field);
+        }
+    }
+});
+
+function _load_group_child_tables(frm, cdt, cdn, doctype) {
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.api.get_doctype_fields',
+        args: { doctype: doctype },
+        callback: function(r) {
+            if (r.message && r.message.success) {
+                let table_fields = r.message.fields.filter(function(f) { return f.fieldtype === 'Table'; });
+                let options = [''].concat(table_fields.map(function(f) {
+                    return f.fieldname + (f.label ? '  —  ' + f.label : '');
+                }));
+                let df = frappe.meta.get_docfield('WhatsApp Group DocType Config', 'child_table_field');
+                if (df) df.options = options.join('\n');
+                frm.refresh_field('group_doctypes');
+            }
+        }
+    });
+}
+
+function _load_group_phone_fields(frm, cdt, cdn, parent_doctype, child_table_fieldname) {
+    // Strip display label if present (fieldname  —  Label)
+    let actual_fieldname = child_table_fieldname.split('  —  ')[0].trim();
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.api.get_doctype_fields',
+        args: { doctype: parent_doctype },
+        callback: function(r) {
+            if (r.message && r.message.success) {
+                let field = r.message.fields.find(function(f) {
+                    return f.fieldname === actual_fieldname && f.fieldtype === 'Table';
+                });
+                if (field && field.options) {
+                    frappe.call({
+                        method: 'whatsapp_notifications.whatsapp_notifications.api.get_doctype_fields',
+                        args: { doctype: field.options },
+                        callback: function(r2) {
+                            if (r2.message && r2.message.success) {
+                                let options = [''].concat(r2.message.fields.map(function(f) {
+                                    return f.fieldname;
+                                }));
+                                let df = frappe.meta.get_docfield('WhatsApp Group DocType Config', 'phone_field');
+                                if (df) df.options = options.join('\n');
+                                frm.refresh_field('group_doctypes');
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
 frappe.ui.form.on('Evolution API Settings', {
     refresh: function(frm) {
         // Generate and display webhook URL
