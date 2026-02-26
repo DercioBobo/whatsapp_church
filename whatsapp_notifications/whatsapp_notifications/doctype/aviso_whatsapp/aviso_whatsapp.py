@@ -476,18 +476,8 @@ class AvisoWhatsApp(Document):
                         recipients.append({"nome": owner, "contacto": n, "number_owner": owner, "origem": "Manual", "doc": None})
 
         elif tipo == "Grupo WhatsApp":
-            group_id = fonte.grupo_id or ""
-            group_nome = fonte.grupo_nome or ""
-            # Prefer stored WhatsApp Grupo record over manual ID
-            if fonte.grupo_whatsapp:
-                try:
-                    grupo_doc = frappe.get_doc("WhatsApp Grupo", fonte.grupo_whatsapp)
-                    group_id = grupo_doc.grupo_id or group_id
-                    group_nome = group_nome or grupo_doc.grupo_nome
-                except frappe.DoesNotExistError:
-                    pass
-            if group_id:
-                recipients.append({"nome": group_nome or group_id, "contacto": group_id, "origem": "Grupo WhatsApp", "doc": None})
+            if fonte.grupo_id:
+                recipients.append({"nome": fonte.grupo_nome or fonte.grupo_id, "contacto": fonte.grupo_id, "origem": "Grupo WhatsApp", "doc": None})
 
         return recipients
 

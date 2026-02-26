@@ -1192,155 +1192,111 @@ function show_manual_fonte_dialog(frm) {
 }
 
 // ============================================================
-// WhatsApp group picker — stored groups + live groups on demand
+// WhatsApp group picker — live groups from Evolution API
 // ============================================================
 function show_grupo_fonte_dialog(frm) {
     frappe.call({
-        method: 'whatsapp_notifications.whatsapp_notifications.api.get_all_grupos',
+        method: 'whatsapp_notifications.whatsapp_notifications.api.fetch_whatsapp_groups',
         freeze: true,
-        freeze_message: 'Carregando grupos guardados...',
+        freeze_message: 'Carregando grupos WhatsApp...',
         callback: function(r) {
-            let stored = (r.message && r.message.grupos) || [];
-            // Convert stored to unified shape: {id, subject, size, grupo_name, stored}
-            let groups = stored.map(function(g) {
-                return { id: g.grupo_id, subject: g.grupo_nome, size: g.member_count,
-                         grupo_name: g.name, stored: true };
-            });
-            _open_grupo_picker(frm, groups, false);
-        }
-    });
-}
+            if (!r.message || !r.message.success) {
+                frappe.msgprint({
+                    title: 'Erro',
+                    indicator: 'red',
+                    message: (r.message && r.message.error) || 'Não foi possível carregar os grupos WhatsApp.'
+                });
+                return;
+            }
+            let groups = r.message.groups || [];
+            let selected = new Set();
 
-function _open_grupo_picker(frm, groups, live_loaded) {
-    let selected = new Set();
-
-    let dialog = new frappe.ui.Dialog({
-        title: 'Seleccionar Grupos WhatsApp',
-        size: 'large',
-        fields: [
-            { fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar grupo...' },
-            { fieldname: 'list_html', fieldtype: 'HTML' },
-            { fieldname: 'fetch_html', fieldtype: 'HTML' }
-        ],
-        primary_action_label: 'Adicionar Grupos Seleccionados',
-        primary_action: function() {
-            if (selected.size === 0) { frappe.msgprint('Seleccione pelo menos um grupo.'); return; }
-            dialog.hide();
-            groups.filter(function(g) { return selected.has(g.id); }).forEach(function(g) {
-                let fonte_data = {
-                    tipo_fonte: 'Grupo WhatsApp',
-                    grupo_id: g.id,
-                    grupo_nome: g.subject || g.id,
-                    descricao: (g.subject || g.id) + (g.size ? ' (' + g.size + ' membros)' : '')
-                };
-                // Link to stored WhatsApp Grupo record if available
-                if (g.grupo_name) fonte_data.grupo_whatsapp = g.grupo_name;
-                add_fonte_to_frm(frm, fonte_data);
-            });
-        }
-    });
-
-    function render_list(filter_text) {
-        filter_text = (filter_text || '').toLowerCase();
-        let filtered = groups.filter(function(g) {
-            return (g.subject || '').toLowerCase().includes(filter_text) ||
-                   (g.id || '').toLowerCase().includes(filter_text);
-        });
-        let list_html = `<div style="border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;max-height:340px;overflow-y:auto;">`;
-        if (filtered.length === 0) {
-            list_html += `<div style="padding:24px;text-align:center;color:${WA_COLORS.grey_text};font-size:13px;">
-                Nenhum grupo encontrado.</div>`;
-        } else {
-            filtered.forEach(function(g) {
-                let checked = selected.has(g.id);
-                let badge = g.stored
-                    ? `<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;border-radius:10px;padding:1px 7px;margin-left:6px;">guardado</span>`
-                    : '';
-                list_html += `
-                <div class="wa-select-row" data-id="${frappe.utils.escape_html(g.id)}"
-                    style="display:flex;align-items:center;gap:12px;padding:10px 14px;
-                    border-bottom:1px solid #f0f0f0;cursor:pointer;
-                    background:${checked ? '#e8f5e9' : 'white'};transition:background .1s;">
-                    <div style="width:20px;height:20px;border-radius:4px;flex-shrink:0;
-                        border:2px solid ${checked ? WA_COLORS.green : '#ccc'};
-                        background:${checked ? WA_COLORS.green : 'white'};
-                        display:flex;align-items:center;justify-content:center;">
-                        ${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
-                    </div>
-                    <div style="width:36px;height:36px;border-radius:50%;background:${WA_COLORS.dark_green};
-                        flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-                        </svg>
-                    </div>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                            ${frappe.utils.escape_html(g.subject || g.id)}${badge}
-                        </div>
-                        <div style="font-size:11px;color:${WA_COLORS.grey_text};">
-                            ${g.size ? g.size + ' membros' : 'Grupo'}
-                        </div>
-                    </div>
-                </div>`;
-            });
-        }
-        list_html += '</div>';
-        list_html += `<div style="padding:6px 12px;font-size:12px;color:${WA_COLORS.grey_text};border-top:1px solid #eee;margin-top:4px;">
-            ${selected.size > 0
-                ? `<span style="color:${WA_COLORS.teal};font-weight:500;">&#10003; ${selected.size} grupo(s) seleccionado(s)</span>`
-                : 'Nenhum grupo seleccionado'}
-        </div>`;
-        dialog.fields_dict.list_html.$wrapper.html(list_html);
-        dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function() {
-            let id = $(this).data('id');
-            if (selected.has(id)) { selected.delete(id); } else { selected.add(id); }
-            render_list(dialog.get_value('search'));
-        }).hover(
-            function() { if (!selected.has($(this).data('id'))) $(this).css('background', '#f0f9f7'); },
-            function() { if (!selected.has($(this).data('id'))) $(this).css('background', 'white'); }
-        );
-    }
-
-    function render_fetch_btn() {
-        if (live_loaded) return;
-        dialog.fields_dict.fetch_html.$wrapper.html(
-            `<div style="padding:6px 0;">
-                <button class="btn btn-xs btn-default wa-fetch-live">&#128257; Buscar grupos ao vivo (Evolution API)</button>
-            </div>`
-        );
-        dialog.fields_dict.fetch_html.$wrapper.find('.wa-fetch-live').on('click', function() {
-            $(this).prop('disabled', true).text('Carregando...');
-            frappe.call({
-                method: 'whatsapp_notifications.whatsapp_notifications.api.fetch_whatsapp_groups',
-                callback: function(r2) {
-                    if (r2.message && r2.message.success) {
-                        let stored_ids = new Set(groups.map(function(g) { return g.id; }));
-                        (r2.message.groups || []).forEach(function(g) {
-                            if (!stored_ids.has(g.id)) {
-                                groups.push({ id: g.id, subject: g.subject, size: g.size, stored: false });
-                            }
+            let dialog = new frappe.ui.Dialog({
+                title: 'Seleccionar Grupos WhatsApp',
+                size: 'large',
+                fields: [
+                    { fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar grupo...' },
+                    { fieldname: 'list_html', fieldtype: 'HTML' }
+                ],
+                primary_action_label: 'Adicionar Grupos Seleccionados',
+                primary_action: function() {
+                    if (selected.size === 0) { frappe.msgprint('Seleccione pelo menos um grupo.'); return; }
+                    dialog.hide();
+                    groups.filter(function(g) { return selected.has(g.id); }).forEach(function(g) {
+                        add_fonte_to_frm(frm, {
+                            tipo_fonte: 'Grupo WhatsApp',
+                            grupo_id: g.id,
+                            grupo_nome: g.subject || g.id,
+                            descricao: (g.subject || g.id) + (g.size ? ' (' + g.size + ' membros)' : '')
                         });
-                        live_loaded = true;
-                        render_list(dialog.get_value('search'));
-                        dialog.fields_dict.fetch_html.$wrapper.html(
-                            `<div style="font-size:12px;color:${WA_COLORS.grey_text};padding:4px 0;">
-                                &#10003; Grupos ao vivo carregados
-                            </div>`
-                        );
-                    } else {
-                        $(this).prop('disabled', false).text('&#128257; Buscar grupos ao vivo');
-                        frappe.show_alert({ message: 'Erro ao carregar grupos ao vivo', indicator: 'red' }, 4);
-                    }
+                    });
                 }
             });
-        });
-    }
 
-    render_list('');
-    render_fetch_btn();
-    dialog.fields_dict.search.$input.on('input', function() { render_list($(this).val()); });
-    dialog.show();
-    setTimeout(function() { dialog.fields_dict.search.$input.focus(); }, 200);
+            function render_list(filter_text) {
+                filter_text = (filter_text || '').toLowerCase();
+                let filtered = groups.filter(function(g) {
+                    return (g.subject || '').toLowerCase().includes(filter_text) ||
+                           (g.id || '').toLowerCase().includes(filter_text);
+                });
+                let list_html = `<div style="border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;max-height:340px;overflow-y:auto;">`;
+                if (filtered.length === 0) {
+                    list_html += `<div style="padding:24px;text-align:center;color:${WA_COLORS.grey_text};font-size:13px;">
+                        Nenhum grupo encontrado.</div>`;
+                } else {
+                    filtered.forEach(function(g) {
+                        let checked = selected.has(g.id);
+                        list_html += `
+                        <div class="wa-select-row" data-id="${frappe.utils.escape_html(g.id)}"
+                            style="display:flex;align-items:center;gap:12px;padding:10px 14px;
+                            border-bottom:1px solid #f0f0f0;cursor:pointer;
+                            background:${checked ? '#e8f5e9' : 'white'};transition:background .1s;">
+                            <div style="width:20px;height:20px;border-radius:4px;flex-shrink:0;
+                                border:2px solid ${checked ? WA_COLORS.green : '#ccc'};
+                                background:${checked ? WA_COLORS.green : 'white'};
+                                display:flex;align-items:center;justify-content:center;">
+                                ${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : ''}
+                            </div>
+                            <div style="width:36px;height:36px;border-radius:50%;background:${WA_COLORS.dark_green};
+                                flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                                </svg>
+                            </div>
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                    ${frappe.utils.escape_html(g.subject || g.id)}
+                                </div>
+                                <div style="font-size:11px;color:${WA_COLORS.grey_text};">
+                                    ${g.size ? g.size + ' membros' : 'Grupo'}
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                }
+                list_html += '</div>';
+                list_html += `<div style="padding:6px 12px;font-size:12px;color:${WA_COLORS.grey_text};border-top:1px solid #eee;margin-top:4px;">
+                    ${selected.size > 0
+                        ? `<span style="color:${WA_COLORS.teal};font-weight:500;">&#10003; ${selected.size} grupo(s) seleccionado(s)</span>`
+                        : 'Nenhum grupo seleccionado'}
+                </div>`;
+                dialog.fields_dict.list_html.$wrapper.html(list_html);
+                dialog.fields_dict.list_html.$wrapper.find('.wa-select-row').on('click', function() {
+                    let id = $(this).data('id');
+                    if (selected.has(id)) { selected.delete(id); } else { selected.add(id); }
+                    render_list(dialog.get_value('search'));
+                }).hover(
+                    function() { if (!selected.has($(this).data('id'))) $(this).css('background', '#f0f9f7'); },
+                    function() { if (!selected.has($(this).data('id'))) $(this).css('background', 'white'); }
+                );
+            }
+
+            render_list('');
+            dialog.fields_dict.search.$input.on('input', function() { render_list($(this).val()); });
+            dialog.show();
+            setTimeout(function() { dialog.fields_dict.search.$input.focus(); }, 200);
+        }
+    });
 }
 
 function build_descricao(tipo, values) {
