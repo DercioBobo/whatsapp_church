@@ -81,6 +81,17 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Conversa WhatsApp",
+   "link_count": 0,
+   "link_to": "Conversa WhatsApp",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Aprova\u00e7\u00f5es",
@@ -184,6 +195,14 @@
    "format": "",
    "label": "Avisos WhatsApp",
    "link_to": "Aviso WhatsApp",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "#128C7E",
+   "format": "",
+   "label": "Conversas",
+   "link_to": "Conversa WhatsApp",
    "stats_filter": "",
    "type": "DocType"
   }
