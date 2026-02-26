@@ -1,0 +1,100 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "CONV-.YY.-.##",
+    "creation": "2026-02-26 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "titulo",
+        "status",
+        "chat_html",
+        "primeiro_envio",
+        "ultimo_envio",
+        "fontes",
+        "historico"
+    ],
+    "fields": [
+        {
+            "fieldname": "titulo",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "T\u00edtulo",
+            "reqd": 1,
+            "bold": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Status",
+            "options": "Ativa\nArquivada",
+            "default": "Ativa",
+            "read_only": 1
+        },
+        {
+            "fieldname": "chat_html",
+            "fieldtype": "HTML",
+            "label": "Chat"
+        },
+        {
+            "fieldname": "primeiro_envio",
+            "fieldtype": "Datetime",
+            "label": "Primeiro Envio",
+            "read_only": 1,
+            "hidden": 1
+        },
+        {
+            "fieldname": "ultimo_envio",
+            "fieldtype": "Datetime",
+            "in_list_view": 1,
+            "label": "\u00daltimo Envio",
+            "read_only": 1,
+            "hidden": 1
+        },
+        {
+            "fieldname": "fontes",
+            "fieldtype": "Table",
+            "label": "Fontes de Destinat\u00e1rios",
+            "options": "Aviso WhatsApp Fonte",
+            "hidden": 1
+        },
+        {
+            "fieldname": "historico",
+            "fieldtype": "Table",
+            "label": "Hist\u00f3rico",
+            "options": "Conversa WhatsApp Historico",
+            "hidden": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2026-02-26 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "Conversa WhatsApp",
+    "naming_rule": "Expression (old style)",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 0,
+    "search_fields": "titulo,status",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "title_field": "titulo",
+    "track_changes": 0
+}

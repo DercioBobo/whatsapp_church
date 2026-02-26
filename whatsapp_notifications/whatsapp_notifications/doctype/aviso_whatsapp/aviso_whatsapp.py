@@ -89,6 +89,46 @@ def _parse_numero_nome(line):
     return line, ''
 
 
+def resolver_fontes_list(fontes):
+    """
+    Shared helper: resolve a list of Aviso WhatsApp Fonte rows to recipient dicts.
+    Used by both AvisoWhatsApp and ConversaWhatsApp.
+    """
+    dummy = AvisoWhatsApp.__new__(AvisoWhatsApp)
+    seen = set()
+    result = []
+    for fonte in (fontes or []):
+        for r in dummy._resolver_fonte(fonte):
+            c = (r.get("contacto") or "").strip()
+            if c and c not in seen:
+                seen.add(c)
+                result.append(r)
+    return result
+
+
+def _render_mensagem_para_dest(mensagem, dest):
+    """
+    Shared helper: render a Jinja2 message template for a specific recipient dict.
+    Used by both AvisoWhatsApp and ConversaWhatsApp.
+    """
+    if not mensagem:
+        return ""
+    if "{{" not in mensagem:
+        return mensagem
+    try:
+        context = {
+            "nome": dest.get("nome", ""),
+            "contacto": dest.get("contacto", ""),
+            "origem": dest.get("origem", ""),
+            "number_owner": dest.get("number_owner", dest.get("nome", "")),
+            "doc": dest.get("doc"),
+        }
+        return frappe.render_template(mensagem, context)
+    except Exception as e:
+        frappe.log_error(message=str(e), title="Render Mensagem - Erro")
+        return mensagem
+
+
 @frappe.whitelist()
 def preview_fonte_destinatarios(fonte_json):
     """Return resolved phone numbers for a single fonte definition (preview before saving)."""
@@ -490,15 +530,7 @@ class AvisoWhatsApp(Document):
         if not self.usar_template and "{{" not in self.mensagem:
             return self.mensagem
         try:
-            doc_obj = dest.get("doc")
-            context = {
-                "nome": dest.get("nome", ""),
-                "contacto": dest.get("contacto", ""),
-                "origem": dest.get("origem", ""),
-                "number_owner": dest.get("number_owner", dest.get("nome", "")),
-                "doc": doc_obj
-            }
-            return frappe.render_template(self.mensagem, context)
+            return _render_mensagem_para_dest(self.mensagem, dest)
         except Exception as e:
             frappe.log_error(message=str(e), title="Aviso WhatsApp - Render Template")
             return self.mensagem

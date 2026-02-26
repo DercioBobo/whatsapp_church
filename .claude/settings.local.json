@@ -9,7 +9,9 @@
       "Bash(python:*)",
       "Bash(python3:*)",
       "Bash(ls:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(echo Python validation skipped \\(no python in PATH\\):*)",
+      "Bash(node:*)"
     ]
   }
 }
