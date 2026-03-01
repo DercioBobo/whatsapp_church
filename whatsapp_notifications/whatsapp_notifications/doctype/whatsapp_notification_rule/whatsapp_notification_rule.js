@@ -205,7 +205,8 @@ function setup_watch_fields_ui(frm) {
         method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_table_fields',
         args: {
             doctype: frm.doc.document_type,
-            child_table_field: frm.doc.child_table
+            child_table_field: frm.doc.child_table,
+            all_fields: 1
         },
         callback: function (r) {
             if (!r.message || !r.message.length) return;

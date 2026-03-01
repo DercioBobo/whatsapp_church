@@ -911,14 +911,28 @@ def get_doctype_date_fields(doctype):
     return fields
 
 
+# Field types that are purely structural/UI — never carry data worth watching
+_STRUCTURAL_FIELDTYPES = frozenset({
+    "Section Break", "Column Break", "HTML", "Button", "Fold",
+    "Tab Break", "Table", "Table MultiSelect", "Image",
+    "Attach", "Attach Image", "Barcode", "Signature", "Geolocation",
+    "Heading", "Break",
+})
+
+# Field types suitable as phone number sources
+_PHONE_FIELDTYPES = frozenset({"Data", "Phone", "Int", "Link"})
+
+
 @frappe.whitelist()
-def get_child_table_fields(doctype, child_table_field):
+def get_child_table_fields(doctype, child_table_field, all_fields=False):
     """
-    Get Data/Phone/Int fields from a child table's DocType
+    Get fields from a child table's DocType.
 
     Args:
         doctype: The parent DocType name
         child_table_field: The fieldname of the Table field
+        all_fields: If truthy, return all non-structural fields (for watch-fields picker).
+                    If falsy (default), return only phone-suitable fields.
 
     Returns:
         list: List of dicts with fieldname and label
@@ -932,11 +946,19 @@ def get_child_table_fields(doctype, child_table_field):
         return []
 
     child_meta = frappe.get_meta(table_field.options)
+    include_all = frappe.utils.cint(all_fields)
     fields = []
     for df in child_meta.fields:
-        if df.fieldtype in ("Data", "Phone", "Int", "Link"):
-            fields.append({
-                "fieldname": df.fieldname,
-                "label": "{} ({})".format(df.label or df.fieldname, df.fieldtype)
-            })
+        if include_all:
+            if df.fieldtype not in _STRUCTURAL_FIELDTYPES:
+                fields.append({
+                    "fieldname": df.fieldname,
+                    "label": "{} ({})".format(df.label or df.fieldname, df.fieldtype)
+                })
+        else:
+            if df.fieldtype in _PHONE_FIELDTYPES:
+                fields.append({
+                    "fieldname": df.fieldname,
+                    "label": "{} ({})".format(df.label or df.fieldname, df.fieldtype)
+                })
     return fields
