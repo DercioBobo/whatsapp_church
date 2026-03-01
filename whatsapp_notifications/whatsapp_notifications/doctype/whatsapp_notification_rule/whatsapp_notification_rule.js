@@ -191,15 +191,15 @@ function setup_watch_fields_ui(frm) {
 
     // Remove previous custom UI and restore the raw input
     $wrapper.find('.watch-fields-ui').remove();
-    $wrapper.find('input').show();
+    $wrapper.find('.control-input-wrapper').show();
 
     // Only show when all prerequisites are met
     if (!frm.doc.use_child_table || !frm.doc.only_changed_rows || !frm.doc.child_table || !frm.doc.document_type) {
         return;
     }
 
-    // Hide the raw text input — we replace it with the custom picker
-    $wrapper.find('input').hide();
+    // Hide the raw text input — replaced by chips + select picker below
+    $wrapper.find('.control-input-wrapper').hide();
 
     frappe.call({
         method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_table_fields',
