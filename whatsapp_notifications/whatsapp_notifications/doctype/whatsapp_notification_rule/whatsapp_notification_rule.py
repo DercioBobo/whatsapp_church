@@ -64,6 +64,26 @@ class WhatsAppNotificationRule(Document):
                     indicator="orange"
                 )
 
+        # Validate child_watch_fields against the actual child table schema
+        if self.child_watch_fields and self.use_child_table and self.child_table and self.document_type:
+            meta = frappe.get_meta(self.document_type)
+            child_field = meta.get_field(self.child_table)
+            if child_field and child_field.options:
+                child_meta = frappe.get_meta(child_field.options)
+                child_fieldnames = {df.fieldname for df in child_meta.fields}
+                unknown = [
+                    f.strip()
+                    for f in self.child_watch_fields.split(",")
+                    if f.strip() and f.strip() not in child_fieldnames
+                ]
+                if unknown:
+                    frappe.msgprint(
+                        _("Warning: These Watch Fields were not found in the child table: {}").format(
+                            ", ".join(unknown)
+                        ),
+                        indicator="orange"
+                    )
+
     def validate_date_event(self):
         """Validate Days Before / Days After event settings"""
         if self.event not in ("Days Before", "Days After"):
@@ -89,11 +109,19 @@ class WhatsAppNotificationRule(Document):
     def validate_template(self):
         """Test template syntax"""
         dummy_row = frappe._dict({"name": "TEST", "idx": 1})
+        dummy_context = {
+            "doc": frappe._dict({"name": "TEST"}),
+            "row": dummy_row,
+            "changed_fields": [],
+            "changed_values": {},
+            "previous_values": {},
+            "row_before": frappe._dict(),
+            "frappe": frappe
+        }
         if self.message_template:
             try:
-                # Test render with dummy data (include row for child table templates)
-                test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
-                frappe.render_template(self.message_template, test_context)
+                # Test render with dummy data (include row and diff vars for child table templates)
+                frappe.render_template(self.message_template, dummy_context)
             except (frappe.DoesNotExistError, frappe.ValidationError):
                 # Template is syntactically valid but relies on real linked docs — that's fine
                 pass
@@ -102,8 +130,7 @@ class WhatsAppNotificationRule(Document):
 
         if self.owner_message_template:
             try:
-                test_context = {"doc": frappe._dict({"name": "TEST"}), "row": dummy_row, "frappe": frappe}
-                frappe.render_template(self.owner_message_template, test_context)
+                frappe.render_template(self.owner_message_template, dummy_context)
             except (frappe.DoesNotExistError, frappe.ValidationError):
                 pass
             except Exception as e:
@@ -266,7 +293,8 @@ class WhatsAppNotificationRule(Document):
 
         Returns:
             list: List of dicts with type ('phone' or 'group') and value.
-                  Child table recipients also include 'row' key.
+                  Child table recipients also include 'row', 'changed_fields',
+                  and 'row_before' keys.
         """
         recipients = []
 
@@ -275,21 +303,40 @@ class WhatsAppNotificationRule(Document):
             if self.recipient_type in ("Field Value", "Both", "Phone and Group"):
                 child_rows = getattr(doc, self.child_table, []) or []
 
+                # Determine which fields to watch for change detection
+                watch_fields = None
+                if self.child_watch_fields:
+                    watch_fields = [
+                        f.strip() for f in self.child_watch_fields.split(",")
+                        if f.strip()
+                    ]
+
+                # Build (row, changed_fields, prev_row) tuples for all rows
+                row_entries = self._build_row_entries(doc, child_rows, watch_fields)
+
                 # Filter to new/changed rows if requested
+                # - prev_row is None  → new row  (always include)
+                # - changed_fields    → has actual changes (include)
+                # - both empty/None   → no change (skip)
                 if self.only_changed_rows and self.event in ("On Update", "On Change"):
-                    child_rows = self._filter_changed_rows(doc, child_rows)
+                    row_entries = [
+                        (row, cf, pb) for row, cf, pb in row_entries
+                        if pb is None or cf
+                    ]
 
-                # Apply row condition filter
+                # Apply per-row Jinja2 condition filter
                 if self.row_condition:
-                    child_rows = self._filter_by_row_condition(doc, child_rows)
+                    row_entries = self._filter_by_row_condition(doc, row_entries)
 
-                for row in child_rows:
+                for row, changed_fields, row_before in row_entries:
                     phone = getattr(row, self.child_phone_field, None)
                     if phone:
                         recipients.append({
                             "type": "phone",
                             "value": str(phone),
-                            "row": row
+                            "row": row,
+                            "changed_fields": changed_fields,
+                            "row_before": row_before
                         })
         else:
             # Standard path: get from document field
@@ -320,58 +367,63 @@ class WhatsAppNotificationRule(Document):
 
         return unique_recipients
 
-    def _filter_changed_rows(self, doc, child_rows):
+    def _build_row_entries(self, doc, child_rows, watch_fields=None):
         """
-        Filter child table rows to only new or modified ones.
+        Build a list of (row, changed_field_names, prev_row) tuples for all child rows.
 
-        Compares field values with doc.get_doc_before_save() to find rows
-        that were added or whose data actually changed.
+        Provides the diff information needed both for filtering (only_changed_rows)
+        and for template rendering (changed_fields, previous_values, etc.).
 
-        NOTE: We intentionally compare field values, NOT the `modified`
-        timestamp, because Frappe updates `modified` on every child row
-        whenever the parent document is saved — even for unchanged rows.
+        - New rows:      prev_row = None,    changed_fields = []  (new-row sentinel)
+        - Changed rows:  prev_row = old row, changed_fields = [list of names]
+        - Unchanged rows:prev_row = old row, changed_fields = []
+
+        NOTE: We compare actual field values, NOT the `modified` timestamp, because
+        Frappe refreshes `modified` on every child row on every parent save.
 
         Args:
             doc: The current document
-            child_rows: List of child table rows
+            child_rows: List of current child table rows
+            watch_fields: Optional list of field names to restrict change detection to.
+                          None → compare all non-metadata fields.
 
         Returns:
-            list: Filtered rows (only new/changed)
+            list of (row, changed_fields: list[str], prev_row or None)
         """
         previous = doc.get_doc_before_save()
         if not previous:
-            # New document — all rows are "new"
-            return child_rows
+            # New document — all rows are new
+            return [(row, [], None) for row in child_rows]
 
         prev_rows = getattr(previous, self.child_table, []) or []
         if not prev_rows:
             # No previous rows — all current rows are new
-            return child_rows
+            return [(row, [], None) for row in child_rows]
 
         prev_by_name = {
             r.name: r for r in prev_rows
             if getattr(r, "name", None)
         }
 
-        changed = []
+        result = []
         for row in child_rows:
             row_name = getattr(row, "name", None)
             if not row_name or row_name not in prev_by_name:
-                # New row
-                changed.append(row)
+                # New row — no prev_row, changed_fields = [] (caller treats None prev as new)
+                result.append((row, [], None))
             else:
-                # Compare actual field values (skip metadata)
-                if _child_row_has_changed(row, prev_by_name[row_name]):
-                    changed.append(row)
+                prev_row = prev_by_name[row_name]
+                changed_fields = _get_changed_field_names(row, prev_row, watch_fields)
+                result.append((row, changed_fields, prev_row))
 
-        return changed
+        return result
 
-    def _filter_by_row_condition(self, doc, child_rows):
+    def _filter_by_row_condition(self, doc, row_entries):
         """
-        Filter child table rows by a Jinja2 condition.
+        Filter row entries by a Jinja2 condition.
 
         The condition template has access to both `doc` and `row`.
-        Only rows where the condition evaluates to truthy are kept.
+        Only entries where the condition evaluates to truthy are kept.
 
         Supports:
           - Single expression:  {{ row.field != 0 }}
@@ -381,19 +433,19 @@ class WhatsAppNotificationRule(Document):
 
         Args:
             doc: The parent document
-            child_rows: List of child table rows
+            row_entries: list of (row, changed_fields, prev_row) tuples
 
         Returns:
-            list: Rows matching the condition
+            list: Filtered entries (same tuple format)
         """
         filtered = []
-        for row in child_rows:
+        for row, changed_fields, prev_row in row_entries:
             try:
                 context = get_template_context(doc)
                 context["row"] = row
                 rendered = frappe.render_template(self.row_condition, context)
                 if _evaluate_condition_result(rendered):
-                    filtered.append(row)
+                    filtered.append((row, changed_fields, prev_row))
             except Exception as e:
                 frappe.log_error(
                     "Row condition error (rule: {}, row {}): {}".format(
@@ -403,7 +455,7 @@ class WhatsAppNotificationRule(Document):
                 )
         return filtered
 
-    def render_message(self, doc, for_owner=False, row=None):
+    def render_message(self, doc, for_owner=False, row=None, changed_fields=None, row_before=None):
         """
         Render the message template with document context
 
@@ -411,9 +463,17 @@ class WhatsAppNotificationRule(Document):
             doc: The source document
             for_owner: If True, use owner template
             row: Optional child table row for per-row rendering
+            changed_fields: list[str] of field names that changed in this save (child table only)
+            row_before: Previous state of the child row (for showing old values)
 
         Returns:
             str: Rendered message
+
+        Template context extras (when changed_fields is provided):
+            changed_fields   — list of field names that changed, e.g. ["valor_fotos", "valor_cracha"]
+            changed_values   — dict of {field: new_value} for each changed field
+            previous_values  — dict of {field: old_value} for each changed field
+            row_before       — the full previous row object (or None for new rows)
         """
         template = self.owner_message_template if for_owner and self.owner_message_template else self.message_template
 
@@ -421,6 +481,18 @@ class WhatsAppNotificationRule(Document):
             context = get_template_context(doc)
             if row is not None:
                 context["row"] = row
+
+            # Always inject diff variables so templates can reference them safely
+            cf = changed_fields if changed_fields is not None else []
+            context["changed_fields"] = cf
+            context["changed_values"] = {
+                f: getattr(row, f, None) for f in cf
+            } if row is not None else {}
+            context["previous_values"] = {
+                f: getattr(row_before, f, None) for f in cf
+            } if row_before is not None else {}
+            context["row_before"] = row_before
+
             return frappe.render_template(template, context)
         except Exception as e:
             frappe.log_error(
@@ -437,20 +509,22 @@ _CHILD_ROW_META_FIELDS = frozenset({
 })
 
 
-def _child_row_has_changed(current_row, prev_row):
+def _get_changed_field_names(current_row, prev_row, watch_fields=None):
     """
-    Return True if any data field in current_row differs from prev_row.
-
-    Skips metadata fields (name, modified, parent, etc.) because Frappe
-    refreshes those on every save regardless of whether the row changed.
-    Treats None and empty string as equivalent to avoid false positives.
+    Return the list of data field names that differ between current_row and prev_row.
 
     Args:
-        current_row: Post-save child row (Document or frappe._dict)
-        prev_row:    Pre-save child row (from get_doc_before_save())
+        current_row:  Post-save child row (Document or frappe._dict)
+        prev_row:     Pre-save child row (from get_doc_before_save())
+        watch_fields: Optional list of field names to restrict to.
+                      None / empty → check all non-metadata fields.
+
+    Skips metadata fields (name, modified, parent, …) because Frappe
+    refreshes those on every save regardless of actual data changes.
+    Treats None and empty-string as equivalent to avoid false positives.
 
     Returns:
-        bool: True if data changed
+        list[str]: Field names whose values changed
     """
     current_dict = (
         current_row.as_dict()
@@ -458,8 +532,11 @@ def _child_row_has_changed(current_row, prev_row):
         else dict(current_row)
     )
 
+    changed = []
     for key, new_val in current_dict.items():
         if key in _CHILD_ROW_META_FIELDS:
+            continue
+        if watch_fields and key not in watch_fields:
             continue
 
         old_val = getattr(prev_row, key, None)
@@ -471,9 +548,14 @@ def _child_row_has_changed(current_row, prev_row):
             old_val = None
 
         if new_val != old_val:
-            return True
+            changed.append(key)
 
-    return False
+    return changed
+
+
+def _child_row_has_changed(current_row, prev_row, watch_fields=None):
+    """Return True if any (watched) data field changed. Uses _get_changed_field_names."""
+    return bool(_get_changed_field_names(current_row, prev_row, watch_fields))
 
 
 def _evaluate_condition_result(rendered):

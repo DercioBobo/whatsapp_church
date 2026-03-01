@@ -58,6 +58,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
                 load_child_table_options(frm);
                 if (frm.doc.child_table) {
                     load_child_phone_field_options(frm);
+                    setup_watch_fields_ui(frm);
                 }
             }
         }
@@ -128,15 +129,30 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
         } else {
             frm.set_value('child_table', '');
             frm.set_value('child_phone_field', '');
+            frm.set_value('child_watch_fields', '');
         }
         setup_template_help(frm);
+        setup_watch_fields_ui(frm);
     },
 
     child_table: function (frm) {
         frm.set_value('child_phone_field', '');
+        frm.set_value('child_watch_fields', '');
         if (frm.doc.child_table && frm.doc.document_type) {
             load_child_phone_field_options(frm);
+            setup_watch_fields_ui(frm);
+        } else {
+            setup_watch_fields_ui(frm);
         }
+    },
+
+    only_changed_rows: function (frm) {
+        setup_watch_fields_ui(frm);
+    },
+
+    child_watch_fields: function (frm) {
+        // Re-render chips to reflect manual edits to the text field
+        _refresh_watch_chips(frm);
     }
 });
 
@@ -159,6 +175,111 @@ function show_row_condition_hint(frm) {
             ${__('Multi-block')} <code>{{ }} || {{ }}</code> ${__('also works — see Template Help above.')}
         </p>
     `);
+}
+
+/**
+ * Renders a row of clickable field chips below the child_watch_fields input.
+ * Clicking a chip toggles the field in/out of the comma-separated value.
+ * Active chips are highlighted in green; inactive in grey.
+ */
+function setup_watch_fields_ui(frm) {
+    let field = frm.fields_dict.child_watch_fields;
+    if (!field) return;
+
+    let $wrapper = field.$wrapper;
+    $wrapper.find('.watch-fields-ui').remove();
+
+    // Only show when all prerequisites are set
+    if (!frm.doc.use_child_table || !frm.doc.only_changed_rows || !frm.doc.child_table || !frm.doc.document_type) {
+        return;
+    }
+
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_table_fields',
+        args: {
+            doctype: frm.doc.document_type,
+            child_table_field: frm.doc.child_table
+        },
+        callback: function (r) {
+            if (!r.message || !r.message.length) return;
+
+            // Store available fields on the frm for re-use
+            frm._watch_field_options = r.message;
+
+            let $ui = $(`
+                <div class="watch-fields-ui" style="margin-top:6px;">
+                    <p class="text-muted small" style="margin:0 0 5px;">
+                        <strong>${__('Click to watch')}</strong> —
+                        ${__('green = notification fires when this field changes, grey = ignored')}
+                        (${__('leave all grey to watch every field')}):
+                    </p>
+                    <div class="watch-chips" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                </div>
+            `);
+
+            $wrapper.append($ui);
+            _render_watch_chips(frm, r.message);
+        }
+    });
+}
+
+/** Rebuild only the chips (called after field value changes). */
+function _refresh_watch_chips(frm) {
+    if (!frm._watch_field_options) return;
+    _render_watch_chips(frm, frm._watch_field_options);
+}
+
+function _render_watch_chips(frm, fields) {
+    let field = frm.fields_dict.child_watch_fields;
+    if (!field) return;
+
+    let $chips = field.$wrapper.find('.watch-chips');
+    if (!$chips.length) return;
+
+    let current = (frm.doc.child_watch_fields || '')
+        .split(',')
+        .map(f => f.trim())
+        .filter(f => f);
+    let selected = new Set(current);
+
+    $chips.empty();
+
+    fields.forEach(function (f) {
+        let active = selected.has(f.fieldname);
+        let $chip = $(`
+            <span class="watch-chip"
+                  data-fieldname="${frappe.utils.escape_html(f.fieldname)}"
+                  style="
+                    display:inline-flex;align-items:center;gap:4px;
+                    cursor:pointer;padding:3px 10px;border-radius:14px;
+                    border:1px solid;font-size:12px;user-select:none;
+                    transition:background .15s,color .15s;
+                    ${active
+                        ? 'background:#25D366;color:#fff;border-color:#1da050;'
+                        : 'background:#f4f5f6;color:#555;border-color:#d0d5dd;'
+                    }
+                  ">
+                ${active ? '&#10003; ' : ''}${frappe.utils.escape_html(f.label || f.fieldname)}
+                <span class="text-muted" style="font-size:10px;opacity:.7;">(${frappe.utils.escape_html(f.fieldname)})</span>
+            </span>
+        `);
+
+        $chip.on('click', function () {
+            let fn = $(this).data('fieldname');
+            let vals = (frm.doc.child_watch_fields || '')
+                .split(',').map(s => s.trim()).filter(s => s);
+            let idx = vals.indexOf(fn);
+            if (idx >= 0) {
+                vals.splice(idx, 1);
+            } else {
+                vals.push(fn);
+            }
+            // Update the field value silently (avoid re-triggering the full setup)
+            frm.set_value('child_watch_fields', vals.join(', '));
+        });
+
+        $chips.append($chip);
+    });
 }
 
 function update_phone_field_required(frm) {
@@ -290,6 +411,29 @@ function setup_template_help(frm) {
 {{ row.idx }}
 {{ row.nome }}
 {{ row.contacto }}</pre>
+            </div>
+            <div style="margin-bottom:12px;">
+                <strong>${__('What Changed This Save')}</strong>
+                <p class="text-muted small" style="margin:4px 0;">${__('These variables are always available in child-table templates and let you react to exactly which field changed:')}</p>
+                <pre style="background:#f4f5f6;padding:8px;border-radius:4px;">{{/* List of field names that changed */}}
+{% if changed_fields %}Campos alterados: {{ changed_fields | join(", ") }}{% endif %}
+
+{{/* New value of each changed field */}}
+{% if "valor_fotos" in changed_fields %}
+Recebemos o pagamento de *fotos*: {{ changed_values.valor_fotos }}
+{% endif %}
+{% if "valor_cracha" in changed_fields %}
+Recebemos o pagamento de *crachá*: {{ changed_values.valor_cracha }}
+{% endif %}
+
+{{/* Old value (before save) of a changed field */}}
+{% if "valor_ofertorio" in changed_fields %}
+Anterior: {{ previous_values.valor_ofertorio }}  →  Actual: {{ row.valor_ofertorio }}
+{% endif %}
+
+{{/* Full previous row state (or None for new rows) */}}
+{% if row_before %}Oferta anterior: {{ row_before.valor_ofertorio }}{% endif %}</pre>
+                <p class="text-muted small" style="margin:4px 0;">${__('Tip: for new rows')} <code>row_before</code> ${__('is')} <code>None</code> ${__('and')} <code>changed_fields</code> ${__('is empty')} <code>[]</code>. ${__('Use')} <code>{% if row_before %}</code> ${__('to guard against that.')}</p>
             </div>
             <div style="margin-bottom:12px;">
                 <strong>${__('Row Condition — correct syntax')}</strong>

@@ -214,11 +214,13 @@ def process_rule(doc, rule, settings):
     is_child_table = getattr(rule, 'use_child_table', 0) and rule.child_table
 
     if is_child_table:
-        # Per-row rendering: each recipient has a .row, render message individually
+        # Per-row rendering: each recipient has .row, .changed_fields, .row_before
         for recipient in recipients:
             try:
                 row = recipient.get("row") if isinstance(recipient, dict) else None
-                message = rule.render_message(doc, row=row)
+                changed_fields = recipient.get("changed_fields") if isinstance(recipient, dict) else None
+                row_before = recipient.get("row_before") if isinstance(recipient, dict) else None
+                message = rule.render_message(doc, row=row, changed_fields=changed_fields, row_before=row_before)
 
                 if message_type == 'Text Only' and not message:
                     continue

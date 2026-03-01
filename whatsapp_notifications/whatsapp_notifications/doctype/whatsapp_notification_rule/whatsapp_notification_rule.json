@@ -23,6 +23,7 @@
         "child_table",
         "child_phone_field",
         "only_changed_rows",
+        "child_watch_fields",
         "row_condition",
         "column_break_recipient",
         "fixed_recipients",
@@ -169,6 +170,14 @@
             "label": "Only New/Changed Rows",
             "description": "Only send to rows that were added or modified (not all rows)",
             "depends_on": "eval:doc.use_child_table==1 && (doc.event=='On Update' || doc.event=='On Change')"
+        },
+        {
+            "fieldname": "child_watch_fields",
+            "fieldtype": "Data",
+            "label": "Watch These Fields for Changes",
+            "description": "Comma-separated child table field names. A row is considered 'changed' only when at least one of these fields changes. Leave empty to trigger on any field change.",
+            "depends_on": "eval:doc.use_child_table==1 && doc.only_changed_rows==1 && doc.child_table",
+            "placeholder": "e.g. valor_ofertorio,valor_cracha,valor_accao_gracas"
         },
         {
             "fieldname": "row_condition",
