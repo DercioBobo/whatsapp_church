@@ -330,10 +330,10 @@ class WhatsAppNotificationRule(Document):
 
                 for row, changed_fields, row_before in row_entries:
                     phone = getattr(row, self.child_phone_field, None)
-                    if phone:
+                    for single_phone in _split_phone_value(phone):
                         recipients.append({
                             "type": "phone",
-                            "value": str(phone),
+                            "value": single_phone,
                             "row": row,
                             "changed_fields": changed_fields,
                             "row_before": row_before
@@ -342,8 +342,8 @@ class WhatsAppNotificationRule(Document):
             # Standard path: get from document field
             if self.recipient_type in ("Field Value", "Both", "Phone and Group") and self.phone_field:
                 phone = get_nested_value(doc, self.phone_field)
-                if phone:
-                    recipients.append({"type": "phone", "value": str(phone)})
+                for single_phone in _split_phone_value(phone):
+                    recipients.append({"type": "phone", "value": single_phone})
 
         # Get fixed recipients
         if self.recipient_type in ("Fixed Number", "Both") and self.fixed_recipients:
@@ -500,6 +500,26 @@ class WhatsAppNotificationRule(Document):
                 "WhatsApp Template Error"
             )
             return None
+
+
+def _split_phone_value(phone):
+    """
+    Split a phone field value that may contain multiple numbers.
+
+    Handles the common pattern where a single field stores several numbers
+    separated by '/', ',', or ';' — e.g. "841234567/871234567".
+
+    Args:
+        phone: Raw phone field value (string, int, or None)
+
+    Returns:
+        list[str]: Individual phone number strings (non-empty, stripped)
+    """
+    if not phone:
+        return []
+    # Normalise separators then split
+    raw = str(phone).replace(",", "/").replace(";", "/")
+    return [p.strip() for p in raw.split("/") if p.strip()]
 
 
 # Fields that carry no user data — skip when comparing child row changes

@@ -7,6 +7,26 @@ from frappe import _
 import re
 
 
+def split_phone_value(phone):
+    """
+    Split a phone field value that may contain multiple numbers.
+
+    Handles the common pattern where a single field stores several numbers
+    separated by '/', ',', or ';' — e.g. "841234567/871234567".
+
+    Args:
+        phone: Raw phone field value (string, int, or None)
+
+    Returns:
+        list[str]: Individual phone number strings (non-empty, stripped).
+                   Returns empty list if phone is falsy.
+    """
+    if not phone:
+        return []
+    raw = str(phone).replace(",", "/").replace(";", "/")
+    return [p.strip() for p in raw.split("/") if p.strip()]
+
+
 def format_phone_number(phone, country_code=None, local_length=None, local_prefixes=None):
     """
     Format phone number for WhatsApp API

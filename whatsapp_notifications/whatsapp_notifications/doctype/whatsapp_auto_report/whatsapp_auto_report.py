@@ -316,10 +316,12 @@ class WhatsAppAutoReport(Document):
         if not self.recipients:
             return []
 
+        from whatsapp_notifications.whatsapp_notifications.utils import split_phone_value
+
         recipients = []
         for line in self.recipients.split("\n"):
-            phone = line.strip()
-            if phone:
+            # Each line may itself contain multiple numbers (e.g. "841234567/871234567")
+            for phone in split_phone_value(line):
                 recipients.append(phone)
 
         return recipients

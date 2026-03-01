@@ -390,30 +390,44 @@ class EnvioWhatsAppCatequese(Document):
         enviados = 0
         falhados = 0
 
+        from whatsapp_notifications.whatsapp_notifications.utils import split_phone_value
+
         for row in self.destinatarios:
             try:
-                if has_attachment:
-                    result = send_whatsapp_media(
-                        phone=row.contacto,
-                        doctype=self.doctype,
-                        docname=self.name,
-                        file_url=self.anexo,
-                        caption=self.mensagem or "",
-                        queue=False
-                    )
-                else:
-                    result = send_whatsapp(
-                        phone=row.contacto,
-                        message=self.mensagem,
-                        doctype=self.doctype,
-                        docname=self.name,
-                        queue=False
-                    )
-                if result and result.get("success"):
+                phones = split_phone_value(row.contacto)
+                if not phones:
+                    row.db_set("status_envio", "Falhou")
+                    row.db_set("erro", "Sem contacto")
+                    falhados += 1
+                    continue
+
+                row_results = []
+                for phone in phones:
+                    if has_attachment:
+                        result = send_whatsapp_media(
+                            phone=phone,
+                            doctype=self.doctype,
+                            docname=self.name,
+                            file_url=self.anexo,
+                            caption=self.mensagem or "",
+                            queue=False
+                        )
+                    else:
+                        result = send_whatsapp(
+                            phone=phone,
+                            message=self.mensagem,
+                            doctype=self.doctype,
+                            docname=self.name,
+                            queue=False
+                        )
+                    row_results.append(result)
+
+                if any(r and r.get("success") for r in row_results):
                     row.db_set("status_envio", "Enviado")
                     enviados += 1
                 else:
-                    error_msg = result.get("error", "Erro desconhecido") if result else "Sem resposta"
+                    last = next((r for r in reversed(row_results) if r), None)
+                    error_msg = last.get("error", "Erro desconhecido") if last else "Sem resposta"
                     row.db_set("status_envio", "Falhou")
                     row.db_set("erro", str(error_msg))
                     falhados += 1

@@ -178,21 +178,28 @@ function show_row_condition_hint(frm) {
 }
 
 /**
- * Renders a row of clickable field chips below the child_watch_fields input.
- * Clicking a chip toggles the field in/out of the comma-separated value.
- * Active chips are highlighted in green; inactive in grey.
+ * Replaces the child_watch_fields raw input with:
+ *  - A dropdown to pick fields to watch (only un-selected fields shown)
+ *  - Green chips for each selected field, with × to remove
+ *  - "Watching all fields" hint when nothing is selected
  */
 function setup_watch_fields_ui(frm) {
     let field = frm.fields_dict.child_watch_fields;
     if (!field) return;
 
     let $wrapper = field.$wrapper;
-    $wrapper.find('.watch-fields-ui').remove();
 
-    // Only show when all prerequisites are set
+    // Remove previous custom UI and restore the raw input
+    $wrapper.find('.watch-fields-ui').remove();
+    $wrapper.find('input').show();
+
+    // Only show when all prerequisites are met
     if (!frm.doc.use_child_table || !frm.doc.only_changed_rows || !frm.doc.child_table || !frm.doc.document_type) {
         return;
     }
+
+    // Hide the raw text input — we replace it with the custom picker
+    $wrapper.find('input').hide();
 
     frappe.call({
         method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule.get_child_table_fields',
@@ -203,27 +210,47 @@ function setup_watch_fields_ui(frm) {
         callback: function (r) {
             if (!r.message || !r.message.length) return;
 
-            // Store available fields on the frm for re-use
             frm._watch_field_options = r.message;
 
             let $ui = $(`
-                <div class="watch-fields-ui" style="margin-top:6px;">
-                    <p class="text-muted small" style="margin:0 0 5px;">
-                        <strong>${__('Click to watch')}</strong> —
-                        ${__('green = notification fires when this field changes, grey = ignored')}
-                        (${__('leave all grey to watch every field')}):
-                    </p>
-                    <div class="watch-chips" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                <div class="watch-fields-ui" style="margin-top:4px;">
+                    <div class="watch-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:22px;"></div>
+                    <select class="watch-add-select form-control input-xs" style="width:auto;max-width:320px;display:inline-block;">
+                        <option value="">${__('+ Add field to watch...')}</option>
+                    </select>
                 </div>
             `);
 
             $wrapper.append($ui);
+
+            // Populate dropdown — will be filtered by _render_watch_chips
+            frm._watch_field_options.forEach(f => {
+                $ui.find('.watch-add-select').append(
+                    $('<option>').val(f.fieldname).text(`${f.label || f.fieldname} (${f.fieldname})`)
+                );
+            });
+
+            // Adding a field from the dropdown
+            $ui.find('.watch-add-select').on('change', function () {
+                let fn = $(this).val();
+                if (!fn) return;
+
+                let current = (frm.doc.child_watch_fields || '')
+                    .split(',').map(s => s.trim()).filter(Boolean);
+
+                if (!current.includes(fn)) {
+                    current.push(fn);
+                    frm.set_value('child_watch_fields', current.join(', '));
+                }
+                $(this).val('');
+            });
+
             _render_watch_chips(frm, r.message);
         }
     });
 }
 
-/** Rebuild only the chips (called after field value changes). */
+/** Rebuild chips and dropdown options after the value changes. */
 function _refresh_watch_chips(frm) {
     if (!frm._watch_field_options) return;
     _render_watch_chips(frm, frm._watch_field_options);
@@ -233,53 +260,59 @@ function _render_watch_chips(frm, fields) {
     let field = frm.fields_dict.child_watch_fields;
     if (!field) return;
 
-    let $chips = field.$wrapper.find('.watch-chips');
+    let $wrapper = field.$wrapper;
+    let $chips = $wrapper.find('.watch-chips');
+    let $select = $wrapper.find('.watch-add-select');
     if (!$chips.length) return;
 
     let current = (frm.doc.child_watch_fields || '')
-        .split(',')
-        .map(f => f.trim())
-        .filter(f => f);
+        .split(',').map(f => f.trim()).filter(Boolean);
     let selected = new Set(current);
 
+    let labelMap = {};
+    fields.forEach(f => { labelMap[f.fieldname] = f.label || f.fieldname; });
+
+    // Update chips
     $chips.empty();
 
-    fields.forEach(function (f) {
-        let active = selected.has(f.fieldname);
-        let $chip = $(`
-            <span class="watch-chip"
-                  data-fieldname="${frappe.utils.escape_html(f.fieldname)}"
-                  style="
-                    display:inline-flex;align-items:center;gap:4px;
-                    cursor:pointer;padding:3px 10px;border-radius:14px;
-                    border:1px solid;font-size:12px;user-select:none;
-                    transition:background .15s,color .15s;
-                    ${active
-                        ? 'background:#25D366;color:#fff;border-color:#1da050;'
-                        : 'background:#f4f5f6;color:#555;border-color:#d0d5dd;'
-                    }
-                  ">
-                ${active ? '&#10003; ' : ''}${frappe.utils.escape_html(f.label || f.fieldname)}
-                <span class="text-muted" style="font-size:10px;opacity:.7;">(${frappe.utils.escape_html(f.fieldname)})</span>
-            </span>
-        `);
+    if (!current.length) {
+        $chips.append(
+            `<span class="text-muted small" style="line-height:22px;">${__('None selected — all fields are watched')}</span>`
+        );
+    } else {
+        current.forEach(fn => {
+            let label = labelMap[fn] || fn;
+            let $chip = $(`
+                <span class="watch-chip" style="
+                    display:inline-flex;align-items:center;gap:5px;
+                    padding:3px 8px 3px 12px;border-radius:14px;
+                    background:#25D366;color:#fff;border:1px solid #1da050;
+                    font-size:12px;user-select:none;">
+                    <span>${frappe.utils.escape_html(label)}</span>
+                    <span style="font-size:10px;opacity:.8;">(${frappe.utils.escape_html(fn)})</span>
+                    <span class="remove-chip" data-fieldname="${frappe.utils.escape_html(fn)}"
+                          title="${__('Remove')}"
+                          style="cursor:pointer;font-size:16px;line-height:1;margin-left:2px;opacity:.85;">×</span>
+                </span>
+            `);
 
-        $chip.on('click', function () {
-            let fn = $(this).data('fieldname');
-            let vals = (frm.doc.child_watch_fields || '')
-                .split(',').map(s => s.trim()).filter(s => s);
-            let idx = vals.indexOf(fn);
-            if (idx >= 0) {
-                vals.splice(idx, 1);
-            } else {
-                vals.push(fn);
-            }
-            // Update the field value silently (avoid re-triggering the full setup)
-            frm.set_value('child_watch_fields', vals.join(', '));
+            $chip.find('.remove-chip').on('click', function () {
+                let fn = $(this).data('fieldname');
+                let vals = (frm.doc.child_watch_fields || '')
+                    .split(',').map(s => s.trim()).filter(s => s && s !== fn);
+                frm.set_value('child_watch_fields', vals.join(', '));
+            });
+
+            $chips.append($chip);
         });
+    }
 
-        $chips.append($chip);
-    });
+    // Update dropdown: hide already-selected options
+    if ($select.length) {
+        $select.find('option[value!=""]').each(function () {
+            $(this).toggle(!selected.has($(this).val()));
+        });
+    }
 }
 
 function update_phone_field_required(frm) {

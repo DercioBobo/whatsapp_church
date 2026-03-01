@@ -210,21 +210,23 @@ class WhatsAppBirthdayRule(Document):
     def _send_for_doc(self, doc, target_date):
         """Send all applicable messages for a single document"""
         from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp_notification
+        from whatsapp_notifications.whatsapp_notifications.utils import split_phone_value
 
         context = self._build_context(doc, target_date)
 
-        # Send to the birthday person
+        # Send to the birthday person (field may contain multiple numbers separated by /)
         if self.send_to_person and self.phone_field and self.person_message:
             phone = getattr(doc, self.phone_field, None)
             if phone:
                 msg = frappe.render_template(self.person_message, context)
-                send_whatsapp_notification(
-                    phone=str(phone),
-                    message=msg,
-                    reference_doctype=self.document_type,
-                    reference_name=doc.name,
-                    notification_rule=self.name
-                )
+                for single_phone in split_phone_value(phone):
+                    send_whatsapp_notification(
+                        phone=single_phone,
+                        message=msg,
+                        reference_doctype=self.document_type,
+                        reference_name=doc.name,
+                        notification_rule=self.name
+                    )
 
         # Send to group
         if self.send_to_group and self.group_id and self.group_message:
@@ -237,17 +239,18 @@ class WhatsAppBirthdayRule(Document):
                 notification_rule=self.name
             )
 
-        # Send to additional recipients
+        # Send to additional recipients (each recipient.phone may also have multiple numbers)
         if self.send_to_additional and self.additional_message:
             msg = frappe.render_template(self.additional_message, context)
             for recipient in self.additional_recipients:
-                send_whatsapp_notification(
-                    phone=recipient.phone,
-                    message=msg,
-                    reference_doctype=self.document_type,
-                    reference_name=doc.name,
-                    notification_rule=self.name
-                )
+                for single_phone in split_phone_value(recipient.phone):
+                    send_whatsapp_notification(
+                        phone=single_phone,
+                        message=msg,
+                        reference_doctype=self.document_type,
+                        reference_name=doc.name,
+                        notification_rule=self.name
+                    )
 
     def check_duplicate(self, docname):
         """Return True if a notification was already sent today for this doc via this rule"""
