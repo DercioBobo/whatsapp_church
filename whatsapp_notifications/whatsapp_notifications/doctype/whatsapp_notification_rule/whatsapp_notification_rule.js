@@ -49,6 +49,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
 
         setup_template_help(frm);
         show_recipient_hint(frm);
+        show_row_condition_hint(frm);
         update_phone_field_required(frm);
 
         if (frm.doc.document_type) {
@@ -120,6 +121,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
 
     use_child_table: function (frm) {
         update_phone_field_required(frm);
+        show_row_condition_hint(frm);
 
         if (frm.doc.use_child_table && frm.doc.document_type) {
             load_child_table_options(frm);
@@ -139,6 +141,25 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function show_row_condition_hint(frm) {
+    let field = frm.fields_dict.row_condition;
+    if (!field) return;
+
+    let $wrapper = field.$wrapper;
+    $wrapper.find('.row-cond-hint').remove();
+
+    if (!frm.doc.use_child_table) return;
+
+    $wrapper.append(`
+        <p class="row-cond-hint help-box small text-muted" style="margin-top:4px;">
+            <strong>${__('Tip')}:</strong>
+            ${__('Use')} <code>or</code> / <code>and</code> ${__('inside one')} <code>{{ }}</code> ${__('block:')}
+            <code>{{ row.valor_a != 0 or row.valor_b != 0 }}</code>.
+            ${__('Multi-block')} <code>{{ }} || {{ }}</code> ${__('also works — see Template Help above.')}
+        </p>
+    `);
+}
 
 function update_phone_field_required(frm) {
     let needs_phone = ['Field Value', 'Both', 'Phone and Group'].includes(frm.doc.recipient_type);
@@ -269,9 +290,25 @@ function setup_template_help(frm) {
 {{ row.idx }}
 {{ row.nome }}
 {{ row.contacto }}</pre>
-                <p class="text-muted small" style="margin-top:4px;">${__('Row Condition examples:')}</p>
-                <pre style="background:#f4f5f6;padding:8px;border-radius:4px;">{{ row.pago == 1 }}
-{{ row.status == "Aprovado" }}</pre>
+            </div>
+            <div style="margin-bottom:12px;">
+                <strong>${__('Row Condition — correct syntax')}</strong>
+                <p class="text-muted small" style="margin:4px 0;">${__('Use a single Jinja2 expression per {{ }} block. To combine multiple checks use <code>or</code> / <code>and</code> inside one block, or separate blocks with <code>||</code> / <code>&&</code>.')}</p>
+                <pre style="background:#f4f5f6;padding:8px;border-radius:4px;">{{/* single check */}}
+{{ row.pago == 1 }}
+
+{{/* OR inside one block (recommended) */}}
+{{ row.valor_a != 0 or row.valor_b != 0 or row.valor_c }}
+
+{{/* OR across multiple blocks (also works) */}}
+{{ row.valor_a != 0 }} || {{ row.valor_b != 0 }} || {{ row.valor_c }}
+
+{{/* AND */}}
+{{ row.status == "Aprovado" and row.pago == 1 }}</pre>
+                <p class="text-muted small" style="margin-top:6px;color:#c0392b;">
+                    &#9888; <strong>${__('Common mistake:')}</strong>
+                    ${__('Writing')} <code>{{row.campo!=0}} || {{row.outro!=0}}</code> ${__('renders to a string like "True || False" which always passes. Use')} <code>or</code> ${__('inside one block instead.')}
+                </p>
             </div>`;
     }
 

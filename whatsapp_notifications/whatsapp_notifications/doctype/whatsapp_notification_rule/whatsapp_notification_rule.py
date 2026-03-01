@@ -324,8 +324,12 @@ class WhatsAppNotificationRule(Document):
         """
         Filter child table rows to only new or modified ones.
 
-        Compares with doc.get_doc_before_save() to find rows that were
-        added or whose fields changed.
+        Compares field values with doc.get_doc_before_save() to find rows
+        that were added or whose data actually changed.
+
+        NOTE: We intentionally compare field values, NOT the `modified`
+        timestamp, because Frappe updates `modified` on every child row
+        whenever the parent document is saved — even for unchanged rows.
 
         Args:
             doc: The current document
@@ -336,21 +340,28 @@ class WhatsAppNotificationRule(Document):
         """
         previous = doc.get_doc_before_save()
         if not previous:
-            # No previous version (e.g., after_insert) — return all
+            # New document — all rows are "new"
             return child_rows
 
         prev_rows = getattr(previous, self.child_table, []) or []
-        prev_by_name = {r.name: r for r in prev_rows}
+        if not prev_rows:
+            # No previous rows — all current rows are new
+            return child_rows
+
+        prev_by_name = {
+            r.name: r for r in prev_rows
+            if getattr(r, "name", None)
+        }
 
         changed = []
         for row in child_rows:
-            if row.name not in prev_by_name:
+            row_name = getattr(row, "name", None)
+            if not row_name or row_name not in prev_by_name:
                 # New row
                 changed.append(row)
             else:
-                # Check if any field changed
-                prev_row = prev_by_name[row.name]
-                if row.modified != prev_row.modified:
+                # Compare actual field values (skip metadata)
+                if _child_row_has_changed(row, prev_by_name[row_name]):
                     changed.append(row)
 
         return changed
@@ -360,7 +371,13 @@ class WhatsAppNotificationRule(Document):
         Filter child table rows by a Jinja2 condition.
 
         The condition template has access to both `doc` and `row`.
-        Only rows where the condition renders to a truthy value are kept.
+        Only rows where the condition evaluates to truthy are kept.
+
+        Supports:
+          - Single expression:  {{ row.field != 0 }}
+          - Multi-block OR:     {{ row.field_a != 0 }} || {{ row.field_b != 0 }}
+          - Multi-block AND:    {{ row.field_a != 0 }} && {{ row.field_b != 0 }}
+          - Jinja if/else:      {% if row.field %}True{% else %}False{% endif %}
 
         Args:
             doc: The parent document
@@ -374,15 +391,13 @@ class WhatsAppNotificationRule(Document):
             try:
                 context = get_template_context(doc)
                 context["row"] = row
-                result = frappe.render_template(self.row_condition, context)
-                if isinstance(result, str):
-                    result = result.strip().lower() not in ("", "false", "0", "none", "null")
-                if result:
+                rendered = frappe.render_template(self.row_condition, context)
+                if _evaluate_condition_result(rendered):
                     filtered.append(row)
             except Exception as e:
                 frappe.log_error(
                     "Row condition error (rule: {}, row {}): {}".format(
-                        self.rule_name, row.idx, str(e)
+                        self.name, getattr(row, "idx", "?"), str(e)
                     ),
                     "WhatsApp Row Condition Error"
                 )
@@ -413,6 +428,108 @@ class WhatsAppNotificationRule(Document):
                 "WhatsApp Template Error"
             )
             return None
+
+
+# Fields that carry no user data — skip when comparing child row changes
+_CHILD_ROW_META_FIELDS = frozenset({
+    "name", "idx", "modified", "creation", "modified_by", "owner",
+    "docstatus", "parent", "parentfield", "parenttype", "doctype"
+})
+
+
+def _child_row_has_changed(current_row, prev_row):
+    """
+    Return True if any data field in current_row differs from prev_row.
+
+    Skips metadata fields (name, modified, parent, etc.) because Frappe
+    refreshes those on every save regardless of whether the row changed.
+    Treats None and empty string as equivalent to avoid false positives.
+
+    Args:
+        current_row: Post-save child row (Document or frappe._dict)
+        prev_row:    Pre-save child row (from get_doc_before_save())
+
+    Returns:
+        bool: True if data changed
+    """
+    current_dict = (
+        current_row.as_dict()
+        if hasattr(current_row, "as_dict")
+        else dict(current_row)
+    )
+
+    for key, new_val in current_dict.items():
+        if key in _CHILD_ROW_META_FIELDS:
+            continue
+
+        old_val = getattr(prev_row, key, None)
+
+        # Normalise: treat None and "" as the same value
+        if new_val == "" or new_val is None:
+            new_val = None
+        if old_val == "" or old_val is None:
+            old_val = None
+
+        if new_val != old_val:
+            return True
+
+    return False
+
+
+def _evaluate_condition_result(rendered):
+    """
+    Evaluate the string rendered from a Jinja2 condition template.
+
+    Handles the common patterns:
+
+    1. Single expression  — {{ row.field != 0 }}
+       Renders to "True" or "False".
+
+    2. Multi-block OR     — {{ row.a != 0 }} || {{ row.b != 0 }}
+       Renders to e.g. "True || False || False || " (trailing separator OK).
+       Returns True if ANY segment is truthy.
+
+    3. Multi-block AND    — {{ row.a != 0 }} && {{ row.b != 0 }}
+       Returns True only if ALL segments are truthy.
+
+    4. if/else block      — {% if ... %}True{% else %}False{% endif %}
+       Renders to "True" or "False" — handled by case 1.
+
+    Args:
+        rendered: str — output of frappe.render_template()
+
+    Returns:
+        bool
+    """
+    _FALSY = {"", "false", "0", "none", "null", "no"}
+    _TRUTHY = {"true", "1", "yes"}
+
+    s = (rendered or "").strip()
+
+    if not s:
+        return False
+
+    # Multi-block OR  (user wrote {{ expr }} || {{ expr }})
+    if "||" in s:
+        parts = s.split("||")
+        return any(p.strip().lower() in _TRUTHY for p in parts)
+
+    # Multi-block AND (user wrote {{ expr }} && {{ expr }})
+    if "&&" in s:
+        parts = s.split("&&")
+        # Ignore empty segments (e.g. trailing &&)
+        non_empty = [p.strip().lower() for p in parts if p.strip()]
+        return bool(non_empty) and all(p in _TRUTHY for p in non_empty)
+
+    # Single value
+    lower = s.lower()
+    if lower in _TRUTHY:
+        return True
+    if lower in _FALSY:
+        return False
+
+    # Any other non-empty string (e.g. a rendered number like "42") → truthy
+    return True
 
 
 def get_template_context(doc):
