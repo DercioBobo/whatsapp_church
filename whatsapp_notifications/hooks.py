@@ -150,7 +150,8 @@ scheduler_events = {
         "whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_auto_report.whatsapp_auto_report.process_auto_reports"
     ],
     "daily": [
-        "whatsapp_notifications.whatsapp_notifications.tasks.cleanup_old_logs"
+        "whatsapp_notifications.whatsapp_notifications.tasks.cleanup_old_logs",
+        "whatsapp_notifications.whatsapp_notifications.tasks.process_date_event_rules"
     ]
 }
 

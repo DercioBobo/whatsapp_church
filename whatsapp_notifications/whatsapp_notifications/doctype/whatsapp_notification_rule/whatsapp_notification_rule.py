@@ -17,6 +17,7 @@ class WhatsAppNotificationRule(Document):
         """Validate rule configuration"""
         self.validate_document_type()
         self.validate_phone_field()
+        self.validate_date_event()
         self.validate_template()
         self.validate_condition()
         self.validate_time_settings()
@@ -28,33 +29,61 @@ class WhatsAppNotificationRule(Document):
     
     def validate_phone_field(self):
         """Validate phone field exists in DocType or child table"""
-        if self.use_child_table and self.document_type:
-            if self.child_table:
-                meta = frappe.get_meta(self.document_type)
-                child_field = meta.get_field(self.child_table)
-                if not child_field or child_field.fieldtype != "Table":
-                    frappe.throw(
-                        _("'{}' is not a valid Table field in {}").format(
-                            self.child_table, self.document_type
-                        )
+        needs_phone = self.recipient_type in ("Field Value", "Both", "Phone and Group")
+
+        if needs_phone and self.use_child_table and self.document_type:
+            if not self.child_table:
+                frappe.throw(_("Child Table is required when 'Send to Child Table Rows' is enabled"))
+            if not self.child_phone_field:
+                frappe.throw(_("Child Table Phone Field is required when 'Send to Child Table Rows' is enabled"))
+
+            meta = frappe.get_meta(self.document_type)
+            child_field = meta.get_field(self.child_table)
+            if not child_field or child_field.fieldtype != "Table":
+                frappe.throw(
+                    _("'{}' is not a valid Table field in {}").format(
+                        self.child_table, self.document_type
                     )
-                if self.child_phone_field and child_field.options:
-                    child_meta = frappe.get_meta(child_field.options)
-                    if not child_meta.has_field(self.child_phone_field):
-                        frappe.msgprint(
-                            _("Warning: Field '{}' not found in child table '{}'").format(
-                                self.child_phone_field, child_field.options
-                            ),
-                            indicator="orange"
-                        )
-        elif self.phone_field and self.document_type:
+                )
+            if child_field.options:
+                child_meta = frappe.get_meta(child_field.options)
+                if not child_meta.has_field(self.child_phone_field):
+                    frappe.msgprint(
+                        _("Warning: Field '{}' not found in child table '{}'").format(
+                            self.child_phone_field, child_field.options
+                        ),
+                        indicator="orange"
+                    )
+        elif needs_phone and not self.use_child_table and self.phone_field and self.document_type:
             meta = frappe.get_meta(self.document_type)
             if not meta.has_field(self.phone_field):
                 frappe.msgprint(
-                    _("Warning: Field '{}' not found in {}. Make sure it exists or is a child table field.").format(
+                    _("Warning: Field '{}' not found in {}. Make sure it exists.").format(
                         self.phone_field, self.document_type
                     ),
                     indicator="orange"
+                )
+
+    def validate_date_event(self):
+        """Validate Days Before / Days After event settings"""
+        if self.event not in ("Days Before", "Days After"):
+            return
+        if not self.date_field:
+            frappe.throw(_("'Date Field' is required for the '{}' event").format(self.event))
+        if not self.days_offset or self.days_offset <= 0:
+            frappe.throw(_("'Days' must be a positive number for the '{}' event").format(self.event))
+        if self.document_type:
+            meta = frappe.get_meta(self.document_type)
+            field = meta.get_field(self.date_field)
+            if not field:
+                frappe.throw(
+                    _("Field '{}' not found in DocType '{}'").format(self.date_field, self.document_type)
+                )
+            if field.fieldtype not in ("Date", "Datetime"):
+                frappe.throw(
+                    _("Field '{}' must be a Date or Datetime field for '{}' event").format(
+                        self.date_field, self.event
+                    )
                 )
     
     def validate_template(self):
@@ -156,7 +185,9 @@ class WhatsAppNotificationRule(Document):
             "on_submit": "On Submit",
             "on_cancel": "On Cancel",
             "on_change": "On Change",
-            "on_trash": "On Trash"
+            "on_trash": "On Trash",
+            "days_before": "Days Before",
+            "days_after": "Days After"
         }
         if event_map.get(event) != self.event:
             return False
@@ -634,6 +665,31 @@ def get_child_tables(doctype):
                 "options": df.options  # The child DocType name
             })
     return tables
+
+
+@frappe.whitelist()
+def get_doctype_date_fields(doctype):
+    """
+    Get Date and Datetime fields from a DocType (for Days Before/After event)
+
+    Args:
+        doctype: The DocType name
+
+    Returns:
+        list: List of dicts with fieldname and label
+    """
+    if not doctype:
+        return []
+
+    meta = frappe.get_meta(doctype)
+    fields = []
+    for df in meta.fields:
+        if df.fieldtype in ("Date", "Datetime"):
+            fields.append({
+                "fieldname": df.fieldname,
+                "label": "{} ({})".format(df.label or df.fieldname, df.fieldtype)
+            })
+    return fields
 
 
 @frappe.whitelist()

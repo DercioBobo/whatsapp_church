@@ -323,6 +323,116 @@ def trigger_cleanup():
     return {"status": "triggered"}
 
 
+def process_date_event_rules():
+    """
+    Process 'Days Before' and 'Days After' notification rules.
+    Finds documents where a date field matches today +/- the configured offset,
+    and sends WhatsApp notifications for each match.
+    Called daily by scheduler.
+    """
+    from frappe.utils import nowdate, add_days, getdate
+    from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
+    from whatsapp_notifications.whatsapp_notifications.events import process_rule
+
+    try:
+        settings = get_settings()
+        if not settings.get("enabled"):
+            return
+
+        today = getdate(nowdate())
+
+        rule_names = frappe.get_all(
+            "WhatsApp Notification Rule",
+            filters={"enabled": 1, "event": ["in", ["Days Before", "Days After"]]},
+            pluck="name"
+        )
+
+        for rule_name in rule_names:
+            try:
+                rule = frappe.get_doc("WhatsApp Notification Rule", rule_name)
+                _process_date_rule(rule, today, settings, process_rule)
+            except Exception as e:
+                frappe.log_error(
+                    "Error processing date rule {}: {}".format(rule_name, str(e)),
+                    "WhatsApp Date Rule Error"
+                )
+
+    except Exception as e:
+        frappe.log_error(
+            "WhatsApp Date Rules Error: {}".format(str(e)),
+            "WhatsApp Date Rules Error"
+        )
+
+
+def _process_date_rule(rule, today, settings, process_rule_fn):
+    """
+    Process a single Days Before/After rule against all matching documents.
+
+    Args:
+        rule: WhatsApp Notification Rule document
+        today: date object for today
+        settings: Evolution API settings dict
+        process_rule_fn: function reference for process_rule (to avoid circular import)
+    """
+    from frappe.utils import add_days
+    from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule import has_sent_for_rule
+
+    if not rule.date_field or not rule.days_offset:
+        return
+
+    # Calculate target date: the document's date field value we're looking for
+    if rule.event == "Days Before":
+        # Notify X days BEFORE the event → find docs where date_field = today + X
+        target_date = add_days(today, rule.days_offset)
+    else:  # Days After
+        # Notify X days AFTER the event → find docs where date_field = today - X
+        target_date = add_days(today, -rule.days_offset)
+
+    if not rule.is_within_active_hours():
+        return
+
+    try:
+        doc_names = frappe.get_all(
+            rule.document_type,
+            filters={rule.date_field: str(target_date)},
+            pluck="name"
+        )
+    except Exception as e:
+        frappe.log_error(
+            "Date rule {} - error querying '{}' with {}={}: {}".format(
+                rule.name, rule.document_type, rule.date_field, target_date, str(e)
+            ),
+            "WhatsApp Date Rule Query Error"
+        )
+        return
+
+    for docname in doc_names:
+        try:
+            # Prevent duplicate sends within the same day (multiple scheduler runs)
+            sent_today = frappe.db.exists("WhatsApp Message Log", {
+                "notification_rule": rule.name,
+                "reference_doctype": rule.document_type,
+                "reference_name": docname,
+                "status": ["in", ["Sent", "Pending", "Sending", "Queued"]],
+                "creation": [">=", frappe.utils.today()]
+            })
+            if sent_today:
+                continue
+
+            # Respect send_once: never resend if already sent for this doc
+            if rule.send_once and has_sent_for_rule(rule.name, rule.document_type, docname):
+                continue
+
+            doc = frappe.get_doc(rule.document_type, docname)
+            process_rule_fn(doc, rule, settings)
+
+        except Exception as e:
+            frappe.log_error(
+                "Date rule {} - error processing doc {}: {}".format(rule.name, docname, str(e)),
+                "WhatsApp Date Rule Error"
+            )
+
+
 def process_birthday_rules():
     """
     Check all enabled birthday rules and enqueue those whose send_time window is now.

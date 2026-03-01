@@ -13,11 +13,13 @@
         "event",
         "column_break_trigger",
         "value_changed",
+        "days_offset",
+        "date_field",
         "condition",
         "section_recipient",
         "recipient_type",
-        "phone_field",
         "use_child_table",
+        "phone_field",
         "child_table",
         "child_phone_field",
         "only_changed_rows",
@@ -80,7 +82,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Event",
-            "options": "After Insert\nOn Update\nOn Submit\nOn Cancel\nOn Change\nOn Trash",
+            "options": "After Insert\nOn Update\nOn Submit\nOn Cancel\nOn Change\nOn Trash\nDays Before\nDays After",
             "reqd": 1,
             "default": "After Insert"
         },
@@ -91,9 +93,25 @@
         {
             "fieldname": "value_changed",
             "fieldtype": "Select",
-            "label": "Value Changed (for On Change)",
+            "label": "Field to Watch",
             "description": "Field name to monitor for changes. Only used with 'On Change' event.",
             "depends_on": "eval:doc.event=='On Change'"
+        },
+        {
+            "fieldname": "days_offset",
+            "fieldtype": "Int",
+            "label": "Days",
+            "description": "Number of days before or after the date field. Example: 3 = send 3 days before/after.",
+            "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
+            "mandatory_depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'"
+        },
+        {
+            "fieldname": "date_field",
+            "fieldtype": "Select",
+            "label": "Date Field",
+            "description": "Date field in the document to watch. The notification fires when today matches that date minus/plus the Days offset.",
+            "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
+            "mandatory_depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'"
         },
         {
             "fieldname": "condition",
@@ -116,19 +134,19 @@
             "description": "\"Field Value\": send to phone in the document.\n\"Fixed Number\": always send to specific numbers.\n\"Both\": document field + fixed numbers.\n\"Group\": send to a WhatsApp group (click Select Group).\n\"Phone and Group\": document field phone + a group."
         },
         {
-            "fieldname": "phone_field",
-            "fieldtype": "Select",
-            "label": "Phone Field",
-            "description": "Document field containing recipient phone number (e.g., mobile_no, phone, contact_mobile)",
-            "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type)"
-        },
-        {
             "default": "0",
             "fieldname": "use_child_table",
             "fieldtype": "Check",
             "label": "Send to Child Table Rows",
-            "description": "Send individual messages to each row in a child table",
+            "description": "Send individual messages to each row in a child table (phone comes from the child row, not the parent document)",
             "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type)"
+        },
+        {
+            "fieldname": "phone_field",
+            "fieldtype": "Select",
+            "label": "Phone Field",
+            "description": "Document field containing the recipient phone number",
+            "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type) && !doc.use_child_table"
         },
         {
             "fieldname": "child_table",
