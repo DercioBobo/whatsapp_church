@@ -1,11 +1,11 @@
 // WhatsApp Notification Rule - Client Script
 
 const RECIPIENT_HINTS = {
-    'Field Value':    'Reads the phone number from the document field selected below.',
-    'Fixed Number':   'Always sends to the specific phone numbers you enter below.',
-    'Both':           'Sends to both the document field phone AND the fixed numbers.',
-    'Group':          'Sends to a WhatsApp group — click "Select Group" to choose one.',
-    'Phone and Group':'Sends to the document field phone AND the WhatsApp group.'
+    'Document Contact': 'Sends to the phone number stored in a field of the document (e.g. the catechumen\'s contact).',
+    'Fixed Numbers':    'Always sends to a fixed list of phone numbers you enter below, regardless of the document.',
+    'Document + Fixed': 'Sends to both the document\'s phone field AND your fixed list of numbers.',
+    'WhatsApp Group':   'Sends to a WhatsApp group — click "Select Group" to choose one.',
+    'Document + Group': 'Sends to the document\'s phone field AND the selected WhatsApp group.'
 };
 
 const EVENT_HINTS = {
@@ -19,8 +19,7 @@ const EVENT_HINTS = {
     'Days After':   'Scheduled: fires daily for documents where a date field was exactly N days ago in the past.'
 };
 
-const PHONE_FIELD_TYPES   = ['Data', 'Phone', 'Int'];
-const DATE_FIELD_TYPES    = ['Date', 'Datetime'];
+const DATE_FIELD_TYPES = ['Date', 'Datetime'];
 
 frappe.ui.form.on('WhatsApp Notification Rule', {
     refresh: function (frm) {
@@ -57,7 +56,7 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
             if (frm.doc.use_child_table) {
                 load_child_table_options(frm);
                 if (frm.doc.child_table) {
-                    load_child_phone_field_options(frm);
+                    setup_child_phone_field_ui(frm);
                     setup_watch_fields_ui(frm);
                 }
             }
@@ -102,8 +101,8 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
     },
 
     recipient_type: function (frm) {
-        let needs_group = ['Group', 'Phone and Group'].includes(frm.doc.recipient_type);
-        let needs_fixed = ['Fixed Number', 'Both'].includes(frm.doc.recipient_type);
+        let needs_group = ['WhatsApp Group', 'Document + Group'].includes(frm.doc.recipient_type);
+        let needs_fixed = ['Fixed Numbers', 'Document + Fixed'].includes(frm.doc.recipient_type);
 
         frm.toggle_reqd('fixed_recipients', needs_fixed);
 
@@ -138,12 +137,8 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
     child_table: function (frm) {
         frm.set_value('child_phone_field', '');
         frm.set_value('child_watch_fields', '');
-        if (frm.doc.child_table && frm.doc.document_type) {
-            load_child_phone_field_options(frm);
-            setup_watch_fields_ui(frm);
-        } else {
-            setup_watch_fields_ui(frm);
-        }
+        setup_child_phone_field_ui(frm);
+        setup_watch_fields_ui(frm);
     },
 
     only_changed_rows: function (frm) {
@@ -153,6 +148,14 @@ frappe.ui.form.on('WhatsApp Notification Rule', {
     child_watch_fields: function (frm) {
         // Re-render chips to reflect manual edits to the text field
         _refresh_watch_chips(frm);
+    },
+
+    phone_field: function (frm) {
+        _refresh_multifield_ui(frm, 'phone_field');
+    },
+
+    child_phone_field: function (frm) {
+        _refresh_multifield_ui(frm, 'child_phone_field');
     }
 });
 
@@ -316,8 +319,134 @@ function _render_watch_chips(frm, fields) {
     }
 }
 
+// ─── Multi-field Chip Picker (phone_field / child_phone_field) ───────────────
+
+/**
+ * Replace a Data field's raw input with a dropdown+chips picker.
+ * The underlying field stores a comma-separated list of fieldnames.
+ *
+ * @param {object} frm            - Form object
+ * @param {string} field_name     - Frappe field name ('phone_field' or 'child_phone_field')
+ * @param {Array}  available_fields - [{fieldname, label}]
+ */
+function _setup_multifield_ui(frm, field_name, available_fields) {
+    let field = frm.fields_dict[field_name];
+    if (!field) return;
+
+    let $wrapper = field.$wrapper;
+    let ui_class = 'mf-ui-' + field_name.replace(/_/g, '-');
+
+    // Remove any previous chip UI, restore raw input
+    $wrapper.find('.' + ui_class).remove();
+    $wrapper.find('.control-input-wrapper').show();
+
+    if (!available_fields || !available_fields.length) return;
+
+    // Hide the raw text input — replaced by chip+select below
+    $wrapper.find('.control-input-wrapper').hide();
+
+    // Cache available fields for refresh
+    frm['_mf_options_' + field_name] = available_fields;
+
+    let $ui = $(`
+        <div class="${ui_class}" style="margin-top:4px;">
+            <div class="${ui_class}-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:22px;"></div>
+            <select class="${ui_class}-select form-control input-xs" style="width:auto;max-width:320px;display:inline-block;">
+                <option value="">${__('+ Add field...')}</option>
+            </select>
+        </div>
+    `);
+
+    $wrapper.append($ui);
+
+    // Populate dropdown
+    available_fields.forEach(f => {
+        $ui.find('.' + ui_class + '-select').append(
+            $('<option>').val(f.fieldname).text(f.label || f.fieldname)
+        );
+    });
+
+    // Add field on select
+    $ui.find('.' + ui_class + '-select').on('change', function () {
+        let fn = $(this).val();
+        if (!fn) return;
+        let current = (frm.doc[field_name] || '')
+            .split(',').map(s => s.trim()).filter(Boolean);
+        if (!current.includes(fn)) {
+            current.push(fn);
+            frm.set_value(field_name, current.join(', '));
+        }
+        $(this).val('');
+    });
+
+    _render_multifield_chips(frm, field_name, available_fields);
+}
+
+/** Re-render chips when the field value changes externally. */
+function _refresh_multifield_ui(frm, field_name) {
+    let available = frm['_mf_options_' + field_name];
+    if (!available) return;
+    _render_multifield_chips(frm, field_name, available);
+}
+
+function _render_multifield_chips(frm, field_name, fields) {
+    let field = frm.fields_dict[field_name];
+    if (!field) return;
+
+    let $wrapper = field.$wrapper;
+    let ui_class = 'mf-ui-' + field_name.replace(/_/g, '-');
+    let $chips = $wrapper.find('.' + ui_class + '-chips');
+    let $select = $wrapper.find('.' + ui_class + '-select');
+    if (!$chips.length) return;
+
+    let current = (frm.doc[field_name] || '')
+        .split(',').map(f => f.trim()).filter(Boolean);
+    let selected = new Set(current);
+
+    let labelMap = {};
+    fields.forEach(f => { labelMap[f.fieldname] = f.label || f.fieldname; });
+
+    $chips.empty();
+
+    if (!current.length) {
+        $chips.append(
+            `<span class="text-muted small" style="line-height:22px;">${__('No field selected')}</span>`
+        );
+    } else {
+        current.forEach(fn => {
+            let label = labelMap[fn] || fn;
+            let $chip = $(`
+                <span style="
+                    display:inline-flex;align-items:center;gap:5px;
+                    padding:3px 8px 3px 12px;border-radius:14px;
+                    background:#2196F3;color:#fff;border:1px solid #1565C0;
+                    font-size:12px;user-select:none;">
+                    <span>${frappe.utils.escape_html(label)}</span>
+                    <span class="remove-mf-chip" data-fieldname="${frappe.utils.escape_html(fn)}"
+                          title="${__('Remove')}"
+                          style="cursor:pointer;font-size:16px;line-height:1;margin-left:2px;opacity:.85;">×</span>
+                </span>
+            `);
+            $chip.find('.remove-mf-chip').on('click', function () {
+                let fn = $(this).data('fieldname');
+                let vals = (frm.doc[field_name] || '')
+                    .split(',').map(s => s.trim()).filter(s => s && s !== fn);
+                frm.set_value(field_name, vals.join(', '));
+            });
+            $chips.append($chip);
+        });
+    }
+
+    // Hide already-selected options in the dropdown
+    if ($select.length) {
+        $select.find('option[value!=""]').each(function () {
+            $(this).toggle(!selected.has($(this).val()));
+        });
+    }
+}
+
 function update_phone_field_required(frm) {
-    let needs_phone = ['Field Value', 'Both', 'Phone and Group'].includes(frm.doc.recipient_type);
+    let needs_phone = ['Document Contact', 'Document + Fixed', 'Document + Group'].includes(frm.doc.recipient_type);
     // phone_field is only relevant (and required) when NOT using child table
     frm.toggle_reqd('phone_field', needs_phone && !frm.doc.use_child_table);
 }
@@ -351,12 +480,6 @@ function load_all_field_options(frm) {
 
             let all_fields = r.message.fields;
 
-            // Phone-like fields for phone_field selector
-            let phone_options = all_fields
-                .filter(f => PHONE_FIELD_TYPES.includes(f.fieldtype))
-                .map(f => ({ label: `${f.label} (${f.fieldname})`, value: f.fieldname }));
-            phone_options.unshift({ label: '', value: '' });
-
             // All fields for value_changed (watch any field)
             let all_options = all_fields
                 .map(f => ({ label: `${f.label} — ${f.fieldtype} (${f.fieldname})`, value: f.fieldname }));
@@ -368,9 +491,15 @@ function load_all_field_options(frm) {
                 .map(f => ({ label: `${f.label} (${f.fieldname})`, value: f.fieldname }));
             date_options.unshift({ label: '', value: '' });
 
-            set_field_options(frm, 'phone_field', phone_options);
             set_field_options(frm, 'value_changed', all_options);
             set_field_options(frm, 'date_field', date_options);
+
+            // phone_field: chip+dropdown picker with all available fields
+            let phone_picker_fields = all_fields.map(f => ({
+                fieldname: f.fieldname,
+                label: `${f.label || f.fieldname} (${f.fieldtype})`
+            }));
+            _setup_multifield_ui(frm, 'phone_field', phone_picker_fields);
         }
     });
 }
@@ -405,7 +534,14 @@ function load_child_table_options(frm) {
     });
 }
 
-function load_child_phone_field_options(frm) {
+function setup_child_phone_field_ui(frm) {
+    // Always teardown first (handles case where child_table is cleared)
+    let field = frm.fields_dict['child_phone_field'];
+    if (field) {
+        field.$wrapper.find('.mf-ui-child-phone-field').remove();
+        field.$wrapper.find('.control-input-wrapper').show();
+    }
+
     if (!frm.doc.document_type || !frm.doc.child_table) return;
 
     frappe.call({
@@ -416,12 +552,11 @@ function load_child_phone_field_options(frm) {
         },
         callback: function (r) {
             if (!r.message) return;
-            let options = [''].concat(r.message.map(f => f.fieldname));
-            let field = frm.get_field('child_phone_field');
-            if (field) {
-                field.df.options = options.join('\n');
-                field.refresh();
-            }
+            let picker_fields = r.message.map(f => ({
+                fieldname: f.fieldname,
+                label: `${f.label || f.fieldname} (${f.fieldname})`
+            }));
+            _setup_multifield_ui(frm, 'child_phone_field', picker_fields);
         }
     });
 }

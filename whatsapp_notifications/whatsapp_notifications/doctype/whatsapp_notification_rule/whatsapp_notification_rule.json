@@ -11,25 +11,26 @@
         "section_trigger",
         "document_type",
         "event",
+        "condition",
         "column_break_trigger",
         "value_changed",
         "days_offset",
         "date_field",
-        "condition",
         "section_recipient",
         "recipient_type",
         "use_child_table",
+        "column_break_recipient",
         "phone_field",
         "child_table",
         "child_phone_field",
-        "only_changed_rows",
-        "child_watch_fields",
-        "row_condition",
-        "column_break_recipient",
         "fixed_recipients",
         "group_id",
         "group_name",
         "select_group_button",
+        "section_row_conditions",
+        "only_changed_rows",
+        "child_watch_fields",
+        "row_condition",
         "section_message",
         "message_type",
         "print_format",
@@ -41,8 +42,8 @@
         "section_advanced",
         "priority",
         "delay_seconds",
-        "column_break_advanced",
         "send_once",
+        "column_break_advanced",
         "active_days",
         "enable_active_hours",
         "active_hours_start",
@@ -88,6 +89,13 @@
             "default": "After Insert"
         },
         {
+            "fieldname": "condition",
+            "fieldtype": "Code",
+            "label": "Condition (Optional)",
+            "description": "Jinja2 condition. Send only if evaluates to True. Example: {{ doc.status == 'Approved' }}",
+            "options": "Jinja"
+        },
+        {
             "fieldname": "column_break_trigger",
             "fieldtype": "Column Break"
         },
@@ -115,24 +123,17 @@
             "mandatory_depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'"
         },
         {
-            "fieldname": "condition",
-            "fieldtype": "Code",
-            "label": "Condition (Optional)",
-            "description": "Jinja2 condition. Send only if evaluates to True. Example: {{ doc.status == 'Approved' }}",
-            "options": "Jinja"
-        },
-        {
             "fieldname": "section_recipient",
             "fieldtype": "Section Break",
-            "label": "Who to Notify"
+            "label": "Recipients"
         },
         {
             "fieldname": "recipient_type",
             "fieldtype": "Select",
             "label": "Recipient Type",
-            "options": "Field Value\nFixed Number\nBoth\nGroup\nPhone and Group",
-            "default": "Field Value",
-            "description": "\"Field Value\": send to phone in the document.\n\"Fixed Number\": always send to specific numbers.\n\"Both\": document field + fixed numbers.\n\"Group\": send to a WhatsApp group (click Select Group).\n\"Phone and Group\": document field phone + a group."
+            "options": "Document Contact\nFixed Numbers\nDocument + Fixed\nWhatsApp Group\nDocument + Group",
+            "default": "Document Contact",
+            "description": "Document Contact: send to the phone number stored in the document field.\nFixed Numbers: always send to a specific list of numbers.\nDocument + Fixed: both the document's phone AND the fixed list.\nWhatsApp Group: send to a WhatsApp group (click Select Group).\nDocument + Group: document phone AND a WhatsApp group."
         },
         {
             "default": "0",
@@ -140,14 +141,18 @@
             "fieldtype": "Check",
             "label": "Send to Child Table Rows",
             "description": "Send individual messages to each row in a child table (phone comes from the child row, not the parent document)",
-            "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type)"
+            "depends_on": "eval:['Document Contact','Document + Fixed','Document + Group'].includes(doc.recipient_type)"
+        },
+        {
+            "fieldname": "column_break_recipient",
+            "fieldtype": "Column Break"
         },
         {
             "fieldname": "phone_field",
-            "fieldtype": "Select",
-            "label": "Phone Field",
-            "description": "Document field containing the recipient phone number",
-            "depends_on": "eval:['Field Value','Both','Phone and Group'].includes(doc.recipient_type) && !doc.use_child_table"
+            "fieldtype": "Data",
+            "label": "Phone Field(s)",
+            "description": "Document field(s) containing the recipient phone number. Select one or more fields.",
+            "depends_on": "eval:['Document Contact','Document + Fixed','Document + Group'].includes(doc.recipient_type) && !doc.use_child_table"
         },
         {
             "fieldname": "child_table",
@@ -158,9 +163,44 @@
         },
         {
             "fieldname": "child_phone_field",
-            "fieldtype": "Select",
-            "label": "Child Table Phone Field",
-            "description": "Phone field within each child table row",
+            "fieldtype": "Data",
+            "label": "Child Phone Field(s)",
+            "description": "Phone field(s) within each child table row. Select one or more fields.",
+            "depends_on": "eval:doc.use_child_table==1 && doc.child_table"
+        },
+        {
+            "fieldname": "fixed_recipients",
+            "fieldtype": "Small Text",
+            "label": "Fixed Recipients",
+            "description": "Comma-separated phone numbers to always receive this notification",
+            "depends_on": "eval:doc.recipient_type=='Fixed Numbers' || doc.recipient_type=='Document + Fixed'"
+        },
+        {
+            "fieldname": "group_id",
+            "fieldtype": "Data",
+            "label": "WhatsApp Group ID",
+            "description": "The WhatsApp group ID (ending with @g.us)",
+            "depends_on": "eval:doc.recipient_type=='WhatsApp Group' || doc.recipient_type=='Document + Group'",
+            "read_only": 1
+        },
+        {
+            "fieldname": "group_name",
+            "fieldtype": "Data",
+            "label": "Group Name",
+            "read_only": 1,
+            "depends_on": "eval:doc.group_id"
+        },
+        {
+            "fieldname": "select_group_button",
+            "fieldtype": "Button",
+            "label": "Select Group",
+            "depends_on": "eval:doc.recipient_type=='WhatsApp Group' || doc.recipient_type=='Document + Group'"
+        },
+        {
+            "fieldname": "section_row_conditions",
+            "fieldtype": "Section Break",
+            "label": "Row Conditions",
+            "collapsible": 0,
             "depends_on": "eval:doc.use_child_table==1 && doc.child_table"
         },
         {
@@ -185,38 +225,6 @@
             "description": "Jinja2 condition per row. Only rows where this evaluates to True will receive a message. Example: {{ row.pago == 1 }}",
             "options": "Jinja",
             "depends_on": "eval:doc.use_child_table==1 && doc.child_table"
-        },
-        {
-            "fieldname": "column_break_recipient",
-            "fieldtype": "Column Break"
-        },
-        {
-            "fieldname": "fixed_recipients",
-            "fieldtype": "Small Text",
-            "label": "Fixed Recipients",
-            "description": "Comma-separated phone numbers to always receive this notification",
-            "depends_on": "eval:doc.recipient_type=='Fixed Number' || doc.recipient_type=='Both'"
-        },
-        {
-            "fieldname": "group_id",
-            "fieldtype": "Data",
-            "label": "WhatsApp Group ID",
-            "description": "The WhatsApp group ID (ending with @g.us)",
-            "depends_on": "eval:doc.recipient_type=='Group' || doc.recipient_type=='Phone and Group'",
-            "read_only": 1
-        },
-        {
-            "fieldname": "group_name",
-            "fieldtype": "Data",
-            "label": "Group Name",
-            "read_only": 1,
-            "depends_on": "eval:doc.group_id"
-        },
-        {
-            "fieldname": "select_group_button",
-            "fieldtype": "Button",
-            "label": "Select Group",
-            "depends_on": "eval:doc.recipient_type=='Group' || doc.recipient_type=='Phone and Group'"
         },
         {
             "fieldname": "section_message",
@@ -256,7 +264,7 @@
         {
             "fieldname": "section_owner_notification",
             "fieldtype": "Section Break",
-            "label": "Also Notify (Optional)",
+            "label": "CC Notification",
             "collapsible": 1
         },
         {
@@ -296,15 +304,15 @@
             "description": "Wait this many seconds before sending (useful for 'save and continue editing' scenarios)"
         },
         {
-            "fieldname": "column_break_advanced",
-            "fieldtype": "Column Break"
-        },
-        {
             "default": "0",
             "fieldname": "send_once",
             "fieldtype": "Check",
             "label": "Send Only Once Per Document",
             "description": "Don't send again if this rule already sent for this document"
+        },
+        {
+            "fieldname": "column_break_advanced",
+            "fieldtype": "Column Break"
         },
         {
             "fieldname": "active_days",

@@ -29,7 +29,7 @@ class WhatsAppNotificationRule(Document):
     
     def validate_phone_field(self):
         """Validate phone field exists in DocType or child table"""
-        needs_phone = self.recipient_type in ("Field Value", "Both", "Phone and Group")
+        needs_phone = self.recipient_type in ("Document Contact", "Document + Fixed", "Document + Group")
 
         if needs_phone and self.use_child_table and self.document_type:
             if not self.child_table:
@@ -47,22 +47,26 @@ class WhatsAppNotificationRule(Document):
                 )
             if child_field.options:
                 child_meta = frappe.get_meta(child_field.options)
-                if not child_meta.has_field(self.child_phone_field):
+                child_phone_fields = [f.strip() for f in self.child_phone_field.split(",") if f.strip()]
+                for cpf in child_phone_fields:
+                    if not child_meta.has_field(cpf):
+                        frappe.msgprint(
+                            _("Warning: Field '{}' not found in child table '{}'").format(
+                                cpf, child_field.options
+                            ),
+                            indicator="orange"
+                        )
+        elif needs_phone and not self.use_child_table and self.phone_field and self.document_type:
+            meta = frappe.get_meta(self.document_type)
+            phone_fields = [f.strip() for f in self.phone_field.split(",") if f.strip()]
+            for pf in phone_fields:
+                if not meta.has_field(pf):
                     frappe.msgprint(
-                        _("Warning: Field '{}' not found in child table '{}'").format(
-                            self.child_phone_field, child_field.options
+                        _("Warning: Field '{}' not found in {}. Make sure it exists.").format(
+                            pf, self.document_type
                         ),
                         indicator="orange"
                     )
-        elif needs_phone and not self.use_child_table and self.phone_field and self.document_type:
-            meta = frappe.get_meta(self.document_type)
-            if not meta.has_field(self.phone_field):
-                frappe.msgprint(
-                    _("Warning: Field '{}' not found in {}. Make sure it exists.").format(
-                        self.phone_field, self.document_type
-                    ),
-                    indicator="orange"
-                )
 
         # Validate child_watch_fields against the actual child table schema
         if self.child_watch_fields and self.use_child_table and self.child_table and self.document_type:
@@ -300,7 +304,7 @@ class WhatsAppNotificationRule(Document):
 
         # Child table path
         if self.use_child_table and self.child_table and self.child_phone_field:
-            if self.recipient_type in ("Field Value", "Both", "Phone and Group"):
+            if self.recipient_type in ("Document Contact", "Document + Fixed", "Document + Group"):
                 child_rows = getattr(doc, self.child_table, []) or []
 
                 # Determine which fields to watch for change detection
@@ -328,32 +332,36 @@ class WhatsAppNotificationRule(Document):
                 if self.row_condition:
                     row_entries = self._filter_by_row_condition(doc, row_entries)
 
+                child_phone_fields = [f.strip() for f in self.child_phone_field.split(",") if f.strip()]
                 for row, changed_fields, row_before in row_entries:
-                    phone = getattr(row, self.child_phone_field, None)
-                    for single_phone in _split_phone_value(phone):
-                        recipients.append({
-                            "type": "phone",
-                            "value": single_phone,
-                            "row": row,
-                            "changed_fields": changed_fields,
-                            "row_before": row_before
-                        })
+                    for field_name in child_phone_fields:
+                        phone = getattr(row, field_name, None)
+                        for single_phone in _split_phone_value(phone):
+                            recipients.append({
+                                "type": "phone",
+                                "value": single_phone,
+                                "row": row,
+                                "changed_fields": changed_fields,
+                                "row_before": row_before
+                            })
         else:
-            # Standard path: get from document field
-            if self.recipient_type in ("Field Value", "Both", "Phone and Group") and self.phone_field:
-                phone = get_nested_value(doc, self.phone_field)
-                for single_phone in _split_phone_value(phone):
-                    recipients.append({"type": "phone", "value": single_phone})
+            # Standard path: get from document field(s) (comma-separated)
+            if self.recipient_type in ("Document Contact", "Document + Fixed", "Document + Group") and self.phone_field:
+                phone_fields = [f.strip() for f in self.phone_field.split(",") if f.strip()]
+                for field_name in phone_fields:
+                    phone = get_nested_value(doc, field_name)
+                    for single_phone in _split_phone_value(phone):
+                        recipients.append({"type": "phone", "value": single_phone})
 
         # Get fixed recipients
-        if self.recipient_type in ("Fixed Number", "Both") and self.fixed_recipients:
+        if self.recipient_type in ("Fixed Numbers", "Document + Fixed") and self.fixed_recipients:
             for phone in self.fixed_recipients.split(","):
                 phone = phone.strip()
                 if phone:
                     recipients.append({"type": "phone", "value": phone})
 
         # Get group recipient
-        if self.recipient_type in ("Group", "Phone and Group") and self.group_id:
+        if self.recipient_type in ("WhatsApp Group", "Document + Group") and self.group_id:
             recipients.append({"type": "group", "value": self.group_id})
 
         # Remove duplicates while preserving order
