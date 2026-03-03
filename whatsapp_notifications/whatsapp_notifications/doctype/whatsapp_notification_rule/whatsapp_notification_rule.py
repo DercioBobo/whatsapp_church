@@ -125,7 +125,7 @@ class WhatsAppNotificationRule(Document):
         if self.message_template:
             try:
                 # Test render with dummy data (include row and diff vars for child table templates)
-                frappe.render_template(self.message_template, dummy_context)
+                frappe.render_template(self.message_template, dummy_context, safe_render=False)
             except (frappe.DoesNotExistError, frappe.ValidationError):
                 # Template is syntactically valid but relies on real linked docs — that's fine
                 pass
@@ -134,7 +134,7 @@ class WhatsAppNotificationRule(Document):
 
         if self.owner_message_template:
             try:
-                frappe.render_template(self.owner_message_template, dummy_context)
+                frappe.render_template(self.owner_message_template, dummy_context, safe_render=False)
             except (frappe.DoesNotExistError, frappe.ValidationError):
                 pass
             except Exception as e:
@@ -145,9 +145,8 @@ class WhatsAppNotificationRule(Document):
         if self.condition:
             try:
                 # Test render with dummy data
-                test_context = {"doc": frappe._dict({"name": "TEST", "status": "Test"}), "frappe": frappe}
-                result = frappe.render_template(self.condition, test_context)
-                # Result should be truthy/falsy
+                test_context = get_template_context(frappe._dict({"name": "TEST", "status": "Test"}))
+                frappe.render_template(self.condition, test_context, safe_render=False)
             except (frappe.DoesNotExistError, frappe.ValidationError):
                 pass
             except Exception as e:
@@ -227,7 +226,7 @@ class WhatsAppNotificationRule(Document):
         if self.condition:
             try:
                 context = get_template_context(doc)
-                result = frappe.render_template(self.condition, context)
+                result = frappe.render_template(self.condition, context, safe_render=False)
                 # Convert string result to boolean
                 if isinstance(result, str):
                     result = result.strip().lower() not in ("", "false", "0", "none", "null")
@@ -302,6 +301,14 @@ class WhatsAppNotificationRule(Document):
         """
         recipients = []
 
+        # Pre-compute fixed phone list (reused in both paths)
+        fixed_phones = []
+        if self.recipient_type in ("Fixed Numbers", "Document + Fixed") and self.fixed_recipients:
+            for phone in self.fixed_recipients.replace("\n", ",").split(","):
+                phone = phone.strip()
+                if phone:
+                    fixed_phones.append(phone)
+
         # Child table path
         if self.use_child_table and self.child_table and self.child_phone_field:
             if self.recipient_type in ("Document Contact", "Document + Fixed", "Document + Group"):
@@ -344,6 +351,16 @@ class WhatsAppNotificationRule(Document):
                                 "changed_fields": changed_fields,
                                 "row_before": row_before
                             })
+                    # For child-table rules, fixed recipients receive one message PER ROW
+                    # with full row context — same message as the row's own recipient.
+                    for phone in fixed_phones:
+                        recipients.append({
+                            "type": "phone",
+                            "value": phone,
+                            "row": row,
+                            "changed_fields": changed_fields,
+                            "row_before": row_before
+                        })
         else:
             # Standard path: get from document field(s) (comma-separated)
             if self.recipient_type in ("Document Contact", "Document + Fixed", "Document + Group") and self.phone_field:
@@ -353,22 +370,22 @@ class WhatsAppNotificationRule(Document):
                     for single_phone in _split_phone_value(phone):
                         recipients.append({"type": "phone", "value": single_phone})
 
-        # Get fixed recipients (support both comma and newline as separators)
-        if self.recipient_type in ("Fixed Numbers", "Document + Fixed") and self.fixed_recipients:
-            for phone in self.fixed_recipients.replace("\n", ",").split(","):
-                phone = phone.strip()
-                if phone:
-                    recipients.append({"type": "phone", "value": phone})
+            # Fixed recipients for non-child-table path (no row context)
+            for phone in fixed_phones:
+                recipients.append({"type": "phone", "value": phone})
 
         # Get group recipient
         if self.recipient_type in ("WhatsApp Group", "Document + Group") and self.group_id:
             recipients.append({"type": "group", "value": self.group_id})
 
-        # Remove duplicates while preserving order
+        # Remove duplicates while preserving order.
+        # For child-table recipients the same phone may appear for multiple rows;
+        # include the row name in the key so each (phone, row) pair is kept.
         seen = set()
         unique_recipients = []
         for r in recipients:
-            key = (r["type"], r["value"])
+            row_name = getattr(r.get("row"), "name", None) if r.get("row") is not None else None
+            key = (r["type"], r["value"], row_name)
             if key not in seen:
                 seen.add(key)
                 unique_recipients.append(r)
@@ -451,7 +468,7 @@ class WhatsAppNotificationRule(Document):
             try:
                 context = get_template_context(doc)
                 context["row"] = row
-                rendered = frappe.render_template(self.row_condition, context)
+                rendered = frappe.render_template(self.row_condition, context, safe_render=False)
                 if _evaluate_condition_result(rendered):
                     filtered.append((row, changed_fields, prev_row))
             except Exception as e:
@@ -487,8 +504,10 @@ class WhatsAppNotificationRule(Document):
 
         try:
             context = get_template_context(doc)
-            if row is not None:
-                context["row"] = row
+            # Always include 'row' in context — use empty frappe._dict() as fallback
+            # so templates with {{ row.field }} don't raise UndefinedError for
+            # non-row recipients (e.g. fixed recipients in child-table rules).
+            context["row"] = row if row is not None else frappe._dict()
 
             # Always inject diff variables so templates can reference them safely
             cf = changed_fields if changed_fields is not None else []
@@ -501,7 +520,7 @@ class WhatsAppNotificationRule(Document):
             } if row_before is not None else {}
             context["row_before"] = row_before
 
-            return frappe.render_template(template, context)
+            return frappe.render_template(template, context, safe_render=False)
         except Exception as e:
             frappe.log_error(
                 "Template render error ({}): {}".format(self.rule_name, str(e)),
