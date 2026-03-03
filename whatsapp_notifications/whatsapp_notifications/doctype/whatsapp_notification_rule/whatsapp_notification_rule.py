@@ -113,15 +113,15 @@ class WhatsAppNotificationRule(Document):
     def validate_template(self):
         """Test template syntax"""
         dummy_row = frappe._dict({"name": "TEST", "idx": 1})
-        dummy_context = {
-            "doc": frappe._dict({"name": "TEST"}),
+        # Use the same context as runtime so utility functions (format_date, flt, etc.) are available
+        dummy_context = get_template_context(frappe._dict({"name": "TEST"}))
+        dummy_context.update({
             "row": dummy_row,
             "changed_fields": [],
             "changed_values": {},
             "previous_values": {},
-            "row_before": frappe._dict(),
-            "frappe": frappe
-        }
+            "row_before": frappe._dict()
+        })
         if self.message_template:
             try:
                 # Test render with dummy data (include row and diff vars for child table templates)
@@ -353,9 +353,9 @@ class WhatsAppNotificationRule(Document):
                     for single_phone in _split_phone_value(phone):
                         recipients.append({"type": "phone", "value": single_phone})
 
-        # Get fixed recipients
+        # Get fixed recipients (support both comma and newline as separators)
         if self.recipient_type in ("Fixed Numbers", "Document + Fixed") and self.fixed_recipients:
-            for phone in self.fixed_recipients.split(","):
+            for phone in self.fixed_recipients.replace("\n", ",").split(","):
                 phone = phone.strip()
                 if phone:
                     recipients.append({"type": "phone", "value": phone})

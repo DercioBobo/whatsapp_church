@@ -172,7 +172,7 @@
             "fieldname": "fixed_recipients",
             "fieldtype": "Small Text",
             "label": "Fixed Recipients",
-            "description": "Comma-separated phone numbers to always receive this notification",
+            "description": "Phone numbers to always receive this notification. One per line or comma-separated.",
             "depends_on": "eval:doc.recipient_type=='Fixed Numbers' || doc.recipient_type=='Document + Fixed'"
         },
         {
