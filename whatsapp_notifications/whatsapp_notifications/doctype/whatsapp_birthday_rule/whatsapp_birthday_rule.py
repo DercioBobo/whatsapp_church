@@ -368,3 +368,17 @@ def process_birthday_rule(rule_name):
     """Enqueue target: process a specific birthday rule (called via frappe.enqueue)"""
     rule = frappe.get_doc("WhatsApp Birthday Rule", rule_name)
     rule.process()
+
+
+@frappe.whitelist()
+def run_now(doctype, docname):
+    """Module-level wrapper so frm.call() can reach the class method."""
+    doc = frappe.get_doc(doctype, docname)
+    return doc.run_now()
+
+
+@frappe.whitelist()
+def preview_for_document(doctype, docname, target_docname):
+    """Module-level wrapper so frm.call() can reach the class method."""
+    doc = frappe.get_doc(doctype, docname)
+    return doc.preview_for_document(target_docname)

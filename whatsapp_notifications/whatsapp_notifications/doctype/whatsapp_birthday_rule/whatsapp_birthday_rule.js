@@ -98,8 +98,9 @@ function run_now(frm) {
         function () {
             frappe.show_alert({ message: __('Processando...'), indicator: 'blue' }, 5);
 
-            frm.call({
-                method: 'run_now',
+            frappe.call({
+                method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_birthday_rule.whatsapp_birthday_rule.run_now',
+                args: { doctype: frm.doc.doctype, docname: frm.doc.name },
                 freeze: true,
                 freeze_message: __('A enviar notificações de aniversário...'),
                 callback: function (r) {
@@ -179,9 +180,9 @@ function show_preview_dialog(frm) {
 }
 
 function render_birthday_preview(frm, docname, dialog) {
-    frm.call({
-        method: 'preview_for_document',
-        args: { docname: docname },
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_birthday_rule.whatsapp_birthday_rule.preview_for_document',
+        args: { doctype: frm.doc.doctype, docname: frm.doc.name, target_docname: docname },
         callback: function (r) {
             if (!r.message) return;
             var p = r.message;
