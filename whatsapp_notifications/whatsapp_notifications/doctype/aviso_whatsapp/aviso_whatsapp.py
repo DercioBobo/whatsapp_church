@@ -89,6 +89,20 @@ def _parse_numero_nome(line):
     return line, ''
 
 
+def _build_extra_filter(fonte):
+    """Build a Frappe filter tuple from filtro_campo / filtro_operador / filtro_valor."""
+    campo = getattr(fonte, "filtro_campo", None)
+    if not campo:
+        return None
+    op = (getattr(fonte, "filtro_operador", None) or "=").strip()
+    valor = getattr(fonte, "filtro_valor", None) or ""
+    if op == "is not set":
+        return [campo, "is", "not set"]
+    if op == "is set":
+        return [campo, "is", "set"]
+    return [campo, op, valor]
+
+
 def resolver_fontes_list(fontes):
     """
     Shared helper: resolve a list of Aviso WhatsApp Fonte rows to recipient dicts.
@@ -163,6 +177,22 @@ def get_doctype_child_tables(doctype):
         {"fieldname": f.fieldname, "label": f.label or f.fieldname, "options": f.options}
         for f in meta.fields
         if f.fieldtype == "Table"
+    ]
+
+
+@frappe.whitelist()
+def get_doctype_all_fields(doctype):
+    """Return all filterable fields for a DocType (for filter field picker)."""
+    try:
+        meta = frappe.get_meta(doctype)
+    except Exception:
+        return []
+    excluded = {"Section Break", "Column Break", "HTML", "Button", "Fold",
+                "Heading", "Tab Break", "Table", "Table MultiSelect"}
+    return [
+        {"fieldname": f.fieldname, "label": f.label or f.fieldname, "fieldtype": f.fieldtype}
+        for f in meta.fields
+        if f.fieldtype not in excluded
     ]
 
 
@@ -375,9 +405,12 @@ class AvisoWhatsApp(Document):
         recipients = []
 
         if tipo == "Catecumenos":
-            filters = {}
+            filters = []
             if fonte.filtro_status:
-                filters["status"] = fonte.filtro_status
+                filters.append(["status", "=", fonte.filtro_status])
+            extra = _build_extra_filter(fonte)
+            if extra:
+                filters.append(extra)
             if fonte.nome_registo:
                 records = [frappe.get_doc("Catecumeno", fonte.nome_registo)] if frappe.db.exists("Catecumeno", fonte.nome_registo) else []
             else:
@@ -391,9 +424,12 @@ class AvisoWhatsApp(Document):
                         recipients.append({"nome": "Padrinho de " + nome, "contacto": num, "origem": "Catecumenos (Padrinho)", "doc": r})
 
         elif tipo == "Catequistas":
-            filters = {}
+            filters = []
             if fonte.filtro_status:
-                filters["status"] = fonte.filtro_status
+                filters.append(["status", "=", fonte.filtro_status])
+            extra = _build_extra_filter(fonte)
+            if extra:
+                filters.append(extra)
             if fonte.nome_registo:
                 records = [frappe.get_doc("Catequista", fonte.nome_registo)] if frappe.db.exists("Catequista", fonte.nome_registo) else []
             else:
@@ -409,9 +445,12 @@ class AvisoWhatsApp(Document):
             if fonte.nome_registo:
                 turmas = [{"name": fonte.nome_registo}]
             else:
-                filters = {}
+                filters = []
                 if fonte.filtro_status:
-                    filters["status"] = fonte.filtro_status
+                    filters.append(["status", "=", fonte.filtro_status])
+                extra = _build_extra_filter(fonte)
+                if extra:
+                    filters.append(extra)
                 turmas = frappe.get_list("Turma", filters=filters, fields=["name"], limit_page_length=0)
             for t in turmas:
                 try:
@@ -437,7 +476,11 @@ class AvisoWhatsApp(Document):
             if fonte.nome_registo:
                 preps = [{"name": fonte.nome_registo}]
             else:
-                preps = frappe.get_list("Preparacao do Sacramento", fields=["name"], limit_page_length=0)
+                filters = []
+                extra = _build_extra_filter(fonte)
+                if extra:
+                    filters.append(extra)
+                preps = frappe.get_list("Preparacao do Sacramento", filters=filters, fields=["name"], limit_page_length=0)
             for p in preps:
                 try:
                     doc = frappe.get_doc("Preparacao do Sacramento", p.get("name") if isinstance(p, dict) else p.name)
@@ -469,10 +512,10 @@ class AvisoWhatsApp(Document):
             if not fonte.doctype_fonte or not fonte.campo_contacto:
                 return []
             try:
-                if fonte.filtro_campo and fonte.filtro_valor:
-                    filters = {fonte.filtro_campo: fonte.filtro_valor}
-                else:
-                    filters = {}
+                filters = []
+                extra = _build_extra_filter(fonte)
+                if extra:
+                    filters.append(extra)
                 if fonte.usar_child_table and fonte.child_table_field and fonte.campo_contacto_child:
                     # Get parent records
                     parents = frappe.get_list(fonte.doctype_fonte, filters=filters, fields=["name"], limit_page_length=0)

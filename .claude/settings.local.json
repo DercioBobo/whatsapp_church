@@ -11,7 +11,8 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(echo Python validation skipped \\(no python in PATH\\):*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(bench:*)"
     ]
   }
 }

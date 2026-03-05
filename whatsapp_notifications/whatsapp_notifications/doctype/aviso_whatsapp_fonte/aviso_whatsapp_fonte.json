@@ -18,6 +18,7 @@
         "child_table_field",
         "campo_contacto_child",
         "filtro_campo",
+        "filtro_operador",
         "filtro_valor",
         "section_manual",
         "numeros",
@@ -100,6 +101,13 @@
             "fieldname": "filtro_campo",
             "fieldtype": "Data",
             "label": "Campo de Filtro"
+        },
+        {
+            "fieldname": "filtro_operador",
+            "fieldtype": "Select",
+            "label": "Operador",
+            "options": "=\n!=\nis set\nis not set\nlike\nnot like\n>\n<",
+            "default": "="
         },
         {
             "fieldname": "filtro_valor",

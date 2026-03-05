@@ -334,7 +334,7 @@ function render_destinatarios_area(frm) {
         let fonte_data = {};
         ['tipo_fonte','filtro_status','nome_registo','incluir_padrinhos',
          'numeros','doctype_fonte','campo_contacto','usar_child_table',
-         'child_table_field','campo_contacto_child','filtro_campo','filtro_valor'
+         'child_table_field','campo_contacto_child','filtro_campo','filtro_operador','filtro_valor'
         ].forEach(function (k) { fonte_data[k] = fonte_row[k] || ''; });
 
         frappe.call({
@@ -815,6 +815,33 @@ function show_catechism_picker_dialog(frm, tipo) {
             label: 'Incluir contactos de Padrinhos'
         });
     }
+    dialog_fields.push({
+        fieldname: 'section_filtro_extra',
+        fieldtype: 'Section Break',
+        label: 'Filtro Adicional (opcional)',
+        collapsible: 1
+    });
+    dialog_fields.push({
+        fieldname: 'filtro_campo',
+        fieldtype: 'Select',
+        label: 'Campo',
+        options: '',
+        description: 'Seleccione ap\u00f3s carregar os campos'
+    });
+    dialog_fields.push({
+        fieldname: 'filtro_operador',
+        fieldtype: 'Select',
+        label: 'Operador',
+        options: '=\n!=\nis set\nis not set\nlike\nnot like\n>\n<',
+        default: '='
+    });
+    dialog_fields.push({
+        fieldname: 'filtro_valor',
+        fieldtype: 'Data',
+        label: 'Valor'
+    });
+    dialog_fields.push({ fieldname: 'preview_resultado_html', fieldtype: 'HTML' });
+    dialog_fields.push({ fieldname: 'section_lista', fieldtype: 'Section Break', label: 'Seleccionar Registo' });
     dialog_fields.push({ fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar...' });
     dialog_fields.push({ fieldname: 'list_html', fieldtype: 'HTML' });
 
@@ -825,17 +852,24 @@ function show_catechism_picker_dialog(frm, tipo) {
         primary_action_label: 'Adicionar Fonte',
         primary_action: function () {
             let values = dialog.get_values() || {};
+            let filtro_campo_val = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
             dialog.hide();
             let fonte_data = {
                 tipo_fonte: tipo,
                 filtro_status: values.filtro_status || '',
                 nome_registo: selected_name || '',
-                incluir_padrinhos: values.incluir_padrinhos || 0
+                incluir_padrinhos: values.incluir_padrinhos || 0,
+                filtro_campo: filtro_campo_val,
+                filtro_operador: values.filtro_operador || '=',
+                filtro_valor: values.filtro_valor || ''
             };
             fonte_data.descricao = build_descricao(tipo, {
                 filtro_status: fonte_data.filtro_status,
                 nome_registo: fonte_data.nome_registo,
                 incluir_padrinhos: fonte_data.incluir_padrinhos,
+                filtro_campo: fonte_data.filtro_campo,
+                filtro_operador: fonte_data.filtro_operador,
+                filtro_valor: fonte_data.filtro_valor,
                 _display: selected_display
             });
             add_fonte_to_frm(frm, fonte_data);
@@ -947,6 +981,47 @@ function show_catechism_picker_dialog(frm, tipo) {
         );
     }
 
+    function do_preview_filter() {
+        let filtro_campo_val = (dialog.get_value('filtro_campo') || '').split(' \u2014 ')[0].trim();
+        let filtro_op = dialog.get_value('filtro_operador') || '=';
+        let filtro_val = dialog.get_value('filtro_valor') || '';
+        if (!filtro_campo_val) {
+            dialog.fields_dict.preview_resultado_html.$wrapper.html('');
+            return;
+        }
+        let preview_fonte = {
+            tipo_fonte: tipo,
+            filtro_status: has_status_filter ? (dialog.get_value('filtro_status') || '') : '',
+            nome_registo: selected_name || '',
+            incluir_padrinhos: dialog.get_value('incluir_padrinhos') || 0,
+            filtro_campo: filtro_campo_val,
+            filtro_operador: filtro_op,
+            filtro_valor: filtro_val
+        };
+        dialog.fields_dict.preview_resultado_html.$wrapper.html(
+            '<div style="padding:6px 0;color:' + WA_COLORS.grey_text + ';font-size:12px;">A calcular...</div>'
+        );
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.preview_fonte_destinatarios',
+            args: { fonte_json: JSON.stringify(preview_fonte) },
+            callback: function (r) {
+                let recs = r.message || [];
+                let html = '<div style="margin-top:6px;padding:8px 12px;background:#f0faf5;border-radius:8px;border:1px solid #c3e6cb;">';
+                html += '<span style="font-weight:700;color:' + WA_COLORS.teal + ';">' + recs.length + ' destinatário(s) com este filtro</span>';
+                if (recs.length > 0) {
+                    html += '<div style="margin-top:4px;font-size:11px;color:#555;max-height:80px;overflow-y:auto;">';
+                    html += recs.slice(0, 8).map(function (rec) {
+                        return frappe.utils.escape_html((rec.nome || '') + ' · ' + rec.contacto);
+                    }).join('<br>');
+                    if (recs.length > 8) html += '<br><em>...e mais ' + (recs.length - 8) + '</em>';
+                    html += '</div>';
+                }
+                html += '</div>';
+                dialog.fields_dict.preview_resultado_html.$wrapper.html(html);
+            }
+        });
+    }
+
     // Load records, then show dialog
     frappe.call({
         method: 'whatsapp_notifications.whatsapp_notifications.doctype.envio_whatsapp_catequese.envio_whatsapp_catequese.get_registros_para_dialogo',
@@ -963,8 +1038,40 @@ function show_catechism_picker_dialog(frm, tipo) {
         }
     });
 
+    // Load all fields for the filter campo picker
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_all_fields',
+        args: { doctype: api_tipo },
+        callback: function (r) {
+            if (r.message && r.message.length) {
+                let opts = '\n' + r.message.map(function (f) {
+                    return f.fieldname + (f.label && f.label !== f.fieldname ? ' \u2014 ' + f.label : '');
+                }).join('\n');
+                dialog.fields_dict.filtro_campo.df.options = opts;
+                dialog.fields_dict.filtro_campo.refresh();
+            }
+        }
+    });
+
     dialog.show();
+
+    // Operator change: hide value field when not needed
     setTimeout(function () {
+        if (dialog.fields_dict.filtro_operador) {
+            dialog.fields_dict.filtro_operador.$input.on('change', function () {
+                let op = $(this).val();
+                let hide = ['is set', 'is not set'].includes(op);
+                dialog.set_df_property('filtro_valor', 'hidden', hide ? 1 : 0);
+                if (hide) dialog.set_value('filtro_valor', '');
+                do_preview_filter();
+            });
+        }
+        if (dialog.fields_dict.filtro_campo) {
+            dialog.fields_dict.filtro_campo.$input.on('change', function () { do_preview_filter(); });
+        }
+        if (dialog.fields_dict.filtro_valor) {
+            dialog.fields_dict.filtro_valor.$input.on('change blur', function () { do_preview_filter(); });
+        }
         if (dialog.fields_dict.search) dialog.fields_dict.search.$input.focus();
     }, 300);
 }
@@ -1030,15 +1137,27 @@ function show_doctype_fonte_dialog(frm) {
             },
             {
                 fieldname: 'filtro_campo',
-                fieldtype: 'Data',
-                label: 'Nome do Campo de Filtro',
-                description: 'Ex: status, departamento'
+                fieldtype: 'Select',
+                label: 'Campo de Filtro',
+                options: '',
+                description: 'Seleccione ap\u00f3s escolher o DocType'
+            },
+            {
+                fieldname: 'filtro_operador',
+                fieldtype: 'Select',
+                label: 'Operador',
+                options: '=\n!=\nis set\nis not set\nlike\nnot like\n>\n<',
+                default: '='
             },
             {
                 fieldname: 'filtro_valor',
                 fieldtype: 'Data',
                 label: 'Valor do Filtro',
-                description: 'Ex: Activo, Sales'
+                description: 'Deixe vazio para operadores "is set" / "is not set"'
+            },
+            {
+                fieldname: 'preview_resultado_html',
+                fieldtype: 'HTML'
             }
         ],
         primary_action_label: 'Adicionar Fonte',
@@ -1054,6 +1173,7 @@ function show_doctype_fonte_dialog(frm) {
                 return;
             }
             dialog.hide();
+            let filtro_campo_val = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
             add_fonte_to_frm(frm, {
                 tipo_fonte: 'DocType',
                 doctype_fonte: values.doctype_fonte,
@@ -1061,12 +1181,68 @@ function show_doctype_fonte_dialog(frm) {
                 usar_child_table: values.usar_child_table || 0,
                 child_table_field: values.child_table_field || '',
                 campo_contacto_child: values.campo_contacto_child || '',
-                filtro_campo: values.filtro_campo || '',
+                filtro_campo: filtro_campo_val,
+                filtro_operador: values.filtro_operador || '=',
                 filtro_valor: values.filtro_valor || '',
-                descricao: build_descricao('DocType', values)
+                descricao: build_descricao('DocType', Object.assign({}, values, {
+                    filtro_campo: filtro_campo_val,
+                    filtro_operador: values.filtro_operador || '='
+                }))
             });
         }
     });
+
+    function do_dt_preview_filter() {
+        let dt = dialog.get_value('doctype_fonte');
+        if (!dt) return;
+        let filtro_campo_val = (dialog.get_value('filtro_campo') || '').split(' \u2014 ')[0].trim();
+        if (!filtro_campo_val) {
+            dialog.fields_dict.preview_resultado_html.$wrapper.html('');
+            return;
+        }
+        let filtro_op = dialog.get_value('filtro_operador') || '=';
+        let filtro_val = dialog.get_value('filtro_valor') || '';
+        let contact_field = dialog.get_value('usar_child_table')
+            ? dialog.get_value('campo_contacto_child')
+            : dialog.get_value('campo_contacto');
+        if (!contact_field) {
+            dialog.fields_dict.preview_resultado_html.$wrapper.html('');
+            return;
+        }
+        let preview_fonte = {
+            tipo_fonte: 'DocType',
+            doctype_fonte: dt,
+            campo_contacto: contact_field,
+            usar_child_table: dialog.get_value('usar_child_table') || 0,
+            child_table_field: dialog.get_value('child_table_field') || '',
+            campo_contacto_child: contact_field,
+            filtro_campo: filtro_campo_val,
+            filtro_operador: filtro_op,
+            filtro_valor: filtro_val
+        };
+        dialog.fields_dict.preview_resultado_html.$wrapper.html(
+            '<div style="padding:6px 0;color:' + WA_COLORS.grey_text + ';font-size:12px;">A calcular...</div>'
+        );
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.preview_fonte_destinatarios',
+            args: { fonte_json: JSON.stringify(preview_fonte) },
+            callback: function (r) {
+                let recs = r.message || [];
+                let html = '<div style="margin-top:6px;padding:8px 12px;background:#f0faf5;border-radius:8px;border:1px solid #c3e6cb;">';
+                html += '<span style="font-weight:700;color:' + WA_COLORS.teal + ';">' + recs.length + ' destinatário(s) com este filtro</span>';
+                if (recs.length > 0) {
+                    html += '<div style="margin-top:4px;font-size:11px;color:#555;max-height:80px;overflow-y:auto;">';
+                    html += recs.slice(0, 8).map(function (rec) {
+                        return frappe.utils.escape_html((rec.nome || '') + ' · ' + rec.contacto);
+                    }).join('<br>');
+                    if (recs.length > 8) html += '<br><em>...e mais ' + (recs.length - 8) + '</em>';
+                    html += '</div>';
+                }
+                html += '</div>';
+                dialog.fields_dict.preview_resultado_html.$wrapper.html(html);
+            }
+        });
+    }
 
     function load_fields_for_doctype(dt) {
         if (!dt) return;
@@ -1076,10 +1252,6 @@ function show_doctype_fonte_dialog(frm) {
             args: { doctype: dt },
             callback: function (r) {
                 if (r.message && r.message.length) {
-                    let opts = '\n' + r.message.map(function (f) {
-                        return f.fieldname + (f.label && f.label !== f.fieldname ? ' (' + f.label + ')' : '');
-                    }).join('\n');
-                    // Store just fieldnames for actual value
                     let opts_plain = '\n' + r.message.map(f => f.fieldname).join('\n');
                     dialog.fields_dict.campo_contacto.df.options = opts_plain;
                     dialog.fields_dict.campo_contacto.refresh();
@@ -1107,7 +1279,33 @@ function show_doctype_fonte_dialog(frm) {
                 }
             }
         });
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_all_fields',
+            args: { doctype: dt },
+            callback: function (r) {
+                if (r.message && r.message.length) {
+                    let opts = '\n' + r.message.map(function (f) {
+                        return f.fieldname + (f.label && f.label !== f.fieldname ? ' \u2014 ' + f.label : '');
+                    }).join('\n');
+                    dialog.fields_dict.filtro_campo.df.options = opts;
+                    dialog.fields_dict.filtro_campo.refresh();
+                }
+            }
+        });
     }
+
+    // Watch operator to show/hide value field
+    setTimeout(function () {
+        dialog.fields_dict.filtro_operador.$input.on('change', function () {
+            let op = $(this).val();
+            let hide = ['is set', 'is not set'].includes(op);
+            dialog.set_df_property('filtro_valor', 'hidden', hide ? 1 : 0);
+            if (hide) dialog.set_value('filtro_valor', '');
+            do_dt_preview_filter();
+        });
+        dialog.fields_dict.filtro_campo.$input.on('change', function () { do_dt_preview_filter(); });
+        dialog.fields_dict.filtro_valor.$input.on('change blur', function () { do_dt_preview_filter(); });
+    }, 300);
 
     // React to Link field selection (awesomplete) or manual entry (blur)
     dialog.fields_dict.doctype_fonte.$input.on('awesomplete-selectcomplete', function () {
@@ -1299,6 +1497,17 @@ function show_grupo_fonte_dialog(frm) {
     });
 }
 
+function _build_filtro_descricao(values) {
+    let campo = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
+    if (!campo) return '';
+    let op = values.filtro_operador || '=';
+    if (['is set', 'is not set'].includes(op)) {
+        return ' [' + campo + ' ' + op + ']';
+    }
+    let val = values.filtro_valor || '';
+    return val ? ' [' + campo + ' ' + op + ' ' + val + ']' : '';
+}
+
 function build_descricao(tipo, values) {
     let display = values._display; // optional resolved display name
     if (tipo === 'Catecumenos') {
@@ -1306,27 +1515,28 @@ function build_descricao(tipo, values) {
         if (values.filtro_status) parts.push(values.filtro_status);
         parts.push(display || values.nome_registo || 'Todos');
         if (values.incluir_padrinhos) parts.push('+ Padrinhos');
-        return parts.join(' \u00b7 ');
+        let base = parts.join(' \u00b7 ');
+        return base + _build_filtro_descricao(values);
     }
     if (tipo === 'Catequistas') {
         let parts = [];
         if (values.filtro_status) parts.push(values.filtro_status);
         parts.push(display || values.nome_registo || 'Todos');
-        return parts.join(' \u00b7 ');
+        return parts.join(' \u00b7 ') + _build_filtro_descricao(values);
     }
     if (tipo === 'Turma') {
         let s = display || values.nome_registo;
-        return s ? 'Turma: ' + s : 'Todas as Turmas';
+        let base = s ? 'Turma: ' + s : 'Todas as Turmas';
+        return base + _build_filtro_descricao(values);
     }
     if (tipo === 'Preparacao Sacramento') {
         let s = display || values.nome_registo || 'Todas';
         if (values.incluir_padrinhos) s += ' + Padrinhos';
-        return s;
+        return s + _build_filtro_descricao(values);
     }
     if (tipo === 'DocType') {
         let base = (values.doctype_fonte || '?') + ' \u2192 ' + (values.campo_contacto || values.campo_contacto_child || '?');
-        if (values.filtro_campo && values.filtro_valor) base += ' [' + values.filtro_campo + '=' + values.filtro_valor + ']';
-        return base;
+        return base + _build_filtro_descricao(values);
     }
     if (tipo === 'Numeros Manuais') {
         let lines = (values.numeros || '').split('\n').filter(l => l.trim());
