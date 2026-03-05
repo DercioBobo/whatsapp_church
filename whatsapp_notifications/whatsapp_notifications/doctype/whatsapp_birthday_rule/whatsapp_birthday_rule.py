@@ -231,8 +231,7 @@ class WhatsAppBirthdayRule(Document):
                             phone=single_phone,
                             message=msg,
                             reference_doctype=self.document_type,
-                            reference_name=doc.name,
-                            notification_rule=self.name
+                            reference_name=doc.name
                         )
 
         # Send to group
@@ -242,8 +241,7 @@ class WhatsAppBirthdayRule(Document):
                 phone=self.group_id,
                 message=msg,
                 reference_doctype=self.document_type,
-                reference_name=doc.name,
-                notification_rule=self.name
+                reference_name=doc.name
             )
 
         # Send to additional recipients (each recipient.phone may also have multiple numbers)
@@ -255,21 +253,20 @@ class WhatsAppBirthdayRule(Document):
                         phone=single_phone,
                         message=msg,
                         reference_doctype=self.document_type,
-                        reference_name=doc.name,
-                        notification_rule=self.name
+                        reference_name=doc.name
                     )
 
     def check_duplicate(self, docname):
-        """Return True if a notification was already sent today for this doc via this rule"""
+        """Return True if a notification was already sent today for this doc"""
         result = frappe.db.sql(
             """
             SELECT name FROM `tabWhatsApp Message Log`
-            WHERE notification_rule = %s
+            WHERE reference_doctype = %s
               AND reference_name = %s
               AND DATE(creation) = CURDATE()
             LIMIT 1
             """,
-            (self.name, docname)
+            (self.document_type, docname)
         )
         return bool(result)
 
