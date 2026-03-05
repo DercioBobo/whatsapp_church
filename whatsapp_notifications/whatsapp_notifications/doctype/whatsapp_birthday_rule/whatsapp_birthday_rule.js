@@ -194,38 +194,76 @@ function _render_multifield_chips(frm, field_name, fields) {
 // ---------------------------------------------------------------------------
 
 function run_now(frm) {
-    frappe.confirm(
-        __('Executar a regra de aniversários agora para hoje?'),
-        function () {
+    var d = new frappe.ui.Dialog({
+        title: __('Executar Regra de Aniversários'),
+        fields: [
+            {
+                fieldname: 'info_html',
+                fieldtype: 'HTML'
+            },
+            {
+                fieldname: 'force',
+                fieldtype: 'Check',
+                label: __('Forçar envio (ignorar verificação de duplicados)'),
+                description: __('Ative se já foi executado hoje e quer enviar novamente')
+            }
+        ],
+        primary_action_label: __('Executar Agora'),
+        primary_action: function (values) {
+            d.hide();
             frappe.show_alert({ message: __('Processando...'), indicator: 'blue' }, 5);
 
             frappe.call({
                 method: 'whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_birthday_rule.whatsapp_birthday_rule.run_now',
-                args: { doctype: frm.doc.doctype, docname: frm.doc.name },
+                args: { doctype: frm.doc.doctype, docname: frm.doc.name, force: values.force ? 1 : 0 },
                 freeze: true,
                 freeze_message: __('A enviar notificações de aniversário...'),
                 callback: function (r) {
-                    if (r.message) {
-                        var res = r.message;
-                        var msg = __('Enviado para {0} destinatário(s).', [res.sent]);
+                    if (!r.message) return;
+                    var res = r.message;
 
-                        if (res.errors && res.errors.length > 0) {
-                            msg += '<br>' + __('Erros: {0}', [res.errors.length]);
-                            frappe.msgprint({
-                                title: __('Resultado'),
-                                indicator: 'orange',
-                                message: msg + '<br><pre>' + res.errors.join('\n') + '</pre>'
-                            });
-                        } else {
-                            frappe.show_alert({ message: msg, indicator: 'green' }, 6);
-                        }
+                    var indicator = res.sent > 0 ? 'green' : (res.errors && res.errors.length ? 'red' : 'orange');
+                    var title = __('Resultado da Execução');
 
-                        frm.reload_doc();
+                    var msg = '';
+                    msg += '<table class="table table-bordered table-sm" style="margin-bottom:0">';
+                    msg += '<tr><td>' + __('Data alvo') + '</td><td><strong>' + frappe.utils.escape_html(res.target_date || '') + '</strong></td></tr>';
+                    msg += '<tr><td>' + __('Aniversários encontrados') + '</td><td><strong>' + (res.total_matches || 0) + '</strong></td></tr>';
+                    msg += '<tr><td>' + __('Enviados') + '</td><td><strong style="color:green">' + (res.sent || 0) + '</strong></td></tr>';
+                    if (res.skipped) {
+                        msg += '<tr><td>' + __('Ignorados (já enviado hoje)') + '</td><td><strong style="color:orange">' + res.skipped + '</strong></td></tr>';
                     }
+                    if (res.errors && res.errors.length) {
+                        msg += '<tr><td>' + __('Erros') + '</td><td><strong style="color:red">' + res.errors.length + '</strong></td></tr>';
+                    }
+                    msg += '</table>';
+
+                    if (res.total_matches === 0) {
+                        msg += '<div class="alert alert-warning mt-2 mb-0">' +
+                            __('Nenhum aniversário encontrado para a data alvo. Verifique o campo de data e os registos.') +
+                            '</div>';
+                    }
+
+                    if (res.errors && res.errors.length) {
+                        msg += '<pre class="mt-2" style="font-size:11px;max-height:120px;overflow-y:auto">' +
+                            frappe.utils.escape_html(res.errors.join('\n')) + '</pre>';
+                    }
+
+                    frappe.msgprint({ title: title, indicator: indicator, message: msg });
+                    frm.reload_doc();
                 }
             });
         }
+    });
+
+    var days = frm.doc.days_before || 0;
+    var date_info = days === 0
+        ? __('Procura aniversários de <strong>hoje</strong>.')
+        : __('Procura aniversários daqui a <strong>{0} dia(s)</strong>.', [days]);
+    d.fields_dict.info_html.$wrapper.html(
+        '<div class="alert alert-info mb-2">' + date_info + '</div>'
     );
+    d.show();
 }
 
 

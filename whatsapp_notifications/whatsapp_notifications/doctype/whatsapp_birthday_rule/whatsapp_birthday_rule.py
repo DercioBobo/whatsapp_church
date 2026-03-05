@@ -26,15 +26,6 @@ class WhatsAppBirthdayRule(Document):
             frappe.throw(
                 _("Field '{}' not found in {}").format(self.birthdate_field, self.document_type)
             )
-        if self.phone_field:
-            for pf in [f.strip() for f in self.phone_field.split(",") if f.strip()]:
-                if not meta.has_field(pf):
-                    frappe.msgprint(
-                        _("Warning: Phone field '{}' not found in {}").format(
-                            pf, self.document_type
-                        ),
-                        indicator="orange"
-                    )
 
     def validate_templates(self):
         dummy_doc = frappe._dict({"name": "TEST"})
@@ -76,10 +67,11 @@ class WhatsAppBirthdayRule(Document):
             return False
         return getdate(self.last_run) == getdate(today())
 
-    def process(self, test_date=None):
+    def process(self, test_date=None, force=False):
         """
         Find birthday matches for target_date, send messages, update status.
         target_date = today + days_before (the birthday we're looking for).
+        force=True skips the duplicate check (useful for manual Run Now).
         """
         if test_date:
             target_date = getdate(test_date)
@@ -88,6 +80,7 @@ class WhatsAppBirthdayRule(Document):
             target_date = getdate(add_days(today(), self.days_before))
 
         sent_count = 0
+        skipped_count = 0
         errors = []
 
         try:
@@ -95,7 +88,8 @@ class WhatsAppBirthdayRule(Document):
 
             for doc in matches:
                 try:
-                    if self.check_duplicate(doc.name):
+                    if not force and self.check_duplicate(doc.name):
+                        skipped_count += 1
                         continue
                     self._send_for_doc(doc, target_date)
                     sent_count += 1
@@ -130,7 +124,13 @@ class WhatsAppBirthdayRule(Document):
             )
             raise
 
-        return {"sent": sent_count, "errors": errors, "total_matches": len(matches) if 'matches' in dir() else 0}
+        return {
+            "sent": sent_count,
+            "skipped": skipped_count,
+            "errors": errors,
+            "total_matches": len(matches) if 'matches' in dir() else 0,
+            "target_date": str(target_date)
+        }
 
     def get_birthday_matches(self, target_date):
         """
@@ -274,14 +274,16 @@ class WhatsAppBirthdayRule(Document):
         return bool(result)
 
     @frappe.whitelist()
-    def run_now(self):
+    def run_now(self, force=False):
         """Trigger process() immediately and return summary"""
-        result = self.process()
+        result = self.process(force=frappe.utils.cint(force))
         return {
             "success": True,
             "sent": result.get("sent", 0),
+            "skipped": result.get("skipped", 0),
             "errors": result.get("errors", []),
-            "total_matches": result.get("total_matches", 0)
+            "total_matches": result.get("total_matches", 0),
+            "target_date": result.get("target_date", "")
         }
 
     @frappe.whitelist()
@@ -363,7 +365,7 @@ def get_birthday_doctype_fields(doctype):
 
         if df.fieldtype in ("Date", "Datetime"):
             date_fields.append(entry)
-        if df.fieldtype in ("Data", "Phone"):
+        if df.fieldtype in ("Data", "Phone", "Small Text", "Text"):
             phone_fields.append(entry)
         if df.fieldtype == "Data":
             data_fields.append(entry)
@@ -383,10 +385,10 @@ def process_birthday_rule(rule_name):
 
 
 @frappe.whitelist()
-def run_now(doctype, docname):
+def run_now(doctype, docname, force=0):
     """Module-level wrapper so frm.call() can reach the class method."""
     doc = frappe.get_doc(doctype, docname)
-    return doc.run_now()
+    return doc.run_now(force=frappe.utils.cint(force))
 
 
 @frappe.whitelist()
