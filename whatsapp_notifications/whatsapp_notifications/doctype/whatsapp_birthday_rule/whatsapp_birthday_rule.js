@@ -42,6 +42,10 @@ frappe.ui.form.on('WhatsApp Birthday Rule', {
         }
     },
 
+    phone_field: function (frm) {
+        _refresh_multifield_ui(frm, 'phone_field');
+    },
+
     select_group_button: function (frm) {
         show_group_selection_dialog(frm);
     }
@@ -64,9 +68,11 @@ function load_birthday_fields(frm) {
             var data = r.message;
 
             set_select_options(frm, 'birthdate_field', data.date_fields);
-            set_select_options(frm, 'phone_field', data.phone_fields, true);
             set_select_options(frm, 'name_field', data.data_fields, true);
             set_select_options(frm, 'filter_field', data.all_fields, true);
+
+            // phone_field uses chip picker instead of a plain Select
+            _setup_multifield_ui(frm, 'phone_field', data.phone_fields);
         }
     });
 }
@@ -85,6 +91,101 @@ function set_select_options(frm, fieldname, fields, include_empty) {
 
     field.df.options = options;
     field.refresh();
+}
+
+// ─── Multi-field Chip Picker (phone_field) ────────────────────────────────────
+
+function _setup_multifield_ui(frm, field_name, available_fields) {
+    var field = frm.fields_dict[field_name];
+    if (!field) return;
+
+    var $wrapper = field.$wrapper;
+    var ui_class = 'mf-ui-' + field_name.replace(/_/g, '-');
+
+    $wrapper.find('.' + ui_class).remove();
+    $wrapper.find('.control-input-wrapper').show();
+
+    if (!available_fields || !available_fields.length) return;
+
+    $wrapper.find('.control-input-wrapper').hide();
+    frm['_mf_options_' + field_name] = available_fields;
+
+    var $ui = $('<div class="' + ui_class + '" style="margin-top:4px;">' +
+        '<div class="' + ui_class + '-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:22px;"></div>' +
+        '<select class="' + ui_class + '-select form-control input-xs" style="width:auto;max-width:320px;display:inline-block;">' +
+        '<option value="">' + __('+ Add field...') + '</option>' +
+        '</select></div>');
+
+    $wrapper.append($ui);
+
+    available_fields.forEach(function (f) {
+        $ui.find('.' + ui_class + '-select').append(
+            $('<option>').val(f.fieldname).text(f.label || f.fieldname)
+        );
+    });
+
+    $ui.find('.' + ui_class + '-select').on('change', function () {
+        var fn = $(this).val();
+        if (!fn) return;
+        var current = (frm.doc[field_name] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (!current.includes(fn)) {
+            current.push(fn);
+            frm.set_value(field_name, current.join(', '));
+        }
+        $(this).val('');
+    });
+
+    _render_multifield_chips(frm, field_name, available_fields);
+}
+
+function _refresh_multifield_ui(frm, field_name) {
+    var available = frm['_mf_options_' + field_name];
+    if (!available) return;
+    _render_multifield_chips(frm, field_name, available);
+}
+
+function _render_multifield_chips(frm, field_name, fields) {
+    var field = frm.fields_dict[field_name];
+    if (!field) return;
+
+    var $wrapper = field.$wrapper;
+    var ui_class = 'mf-ui-' + field_name.replace(/_/g, '-');
+    var $chips = $wrapper.find('.' + ui_class + '-chips');
+    var $select = $wrapper.find('.' + ui_class + '-select');
+    if (!$chips.length) return;
+
+    var current = (frm.doc[field_name] || '').split(',').map(function (f) { return f.trim(); }).filter(Boolean);
+    var selected = new Set(current);
+
+    var labelMap = {};
+    fields.forEach(function (f) { labelMap[f.fieldname] = f.label || f.fieldname; });
+
+    $chips.empty();
+
+    if (!current.length) {
+        $chips.append('<span class="text-muted small" style="line-height:22px;">' + __('No field selected') + '</span>');
+    } else {
+        current.forEach(function (fn) {
+            var label = labelMap[fn] || fn;
+            var $chip = $('<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px 3px 12px;border-radius:14px;background:#2196F3;color:#fff;border:1px solid #1565C0;font-size:12px;user-select:none;">' +
+                '<span>' + frappe.utils.escape_html(label) + '</span>' +
+                '<span class="remove-mf-chip" data-fieldname="' + frappe.utils.escape_html(fn) + '" title="' + __('Remove') + '" style="cursor:pointer;font-size:16px;line-height:1;margin-left:2px;opacity:.85;">×</span>' +
+                '</span>');
+            $chip.find('.remove-mf-chip').on('click', function () {
+                var fn = $(this).data('fieldname');
+                var vals = (frm.doc[field_name] || '').split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s && s !== fn; });
+                frm.set_value(field_name, vals.join(', '));
+            });
+            $chips.append($chip);
+        });
+    }
+
+    if ($select.length) {
+        $select.find('option').each(function () {
+            var val = $(this).val();
+            $(this).toggle(!val || !selected.has(val));
+        });
+    }
 }
 
 

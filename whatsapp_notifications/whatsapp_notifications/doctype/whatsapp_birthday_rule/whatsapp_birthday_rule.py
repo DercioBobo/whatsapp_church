@@ -26,13 +26,15 @@ class WhatsAppBirthdayRule(Document):
             frappe.throw(
                 _("Field '{}' not found in {}").format(self.birthdate_field, self.document_type)
             )
-        if self.phone_field and not meta.has_field(self.phone_field):
-            frappe.msgprint(
-                _("Warning: Phone field '{}' not found in {}").format(
-                    self.phone_field, self.document_type
-                ),
-                indicator="orange"
-            )
+        if self.phone_field:
+            for pf in [f.strip() for f in self.phone_field.split(",") if f.strip()]:
+                if not meta.has_field(pf):
+                    frappe.msgprint(
+                        _("Warning: Phone field '{}' not found in {}").format(
+                            pf, self.document_type
+                        ),
+                        indicator="orange"
+                    )
 
     def validate_templates(self):
         dummy_doc = frappe._dict({"name": "TEST"})
@@ -214,19 +216,24 @@ class WhatsAppBirthdayRule(Document):
 
         context = self._build_context(doc, target_date)
 
-        # Send to the birthday person (field may contain multiple numbers separated by /)
+        # Send to the birthday person — supports multiple comma-separated phone fields
         if self.send_to_person and self.phone_field and self.person_message:
-            phone = getattr(doc, self.phone_field, None)
-            if phone:
-                msg = frappe.render_template(self.person_message, context)
+            msg = frappe.render_template(self.person_message, context)
+            seen = set()
+            for field_name in [f.strip() for f in self.phone_field.split(",") if f.strip()]:
+                phone = getattr(doc, field_name, None)
+                if not phone:
+                    continue
                 for single_phone in split_phone_value(phone):
-                    send_whatsapp_notification(
-                        phone=single_phone,
-                        message=msg,
-                        reference_doctype=self.document_type,
-                        reference_name=doc.name,
-                        notification_rule=self.name
-                    )
+                    if single_phone and single_phone not in seen:
+                        seen.add(single_phone)
+                        send_whatsapp_notification(
+                            phone=single_phone,
+                            message=msg,
+                            reference_doctype=self.document_type,
+                            reference_name=doc.name,
+                            notification_rule=self.name
+                        )
 
         # Send to group
         if self.send_to_group and self.group_id and self.group_message:
@@ -296,7 +303,12 @@ class WhatsAppBirthdayRule(Document):
             try:
                 preview["person_message"] = frappe.render_template(self.person_message, context)
                 if self.phone_field:
-                    preview["person_phone"] = str(getattr(doc, self.phone_field, "") or "")
+                    phones = []
+                    for pf in [f.strip() for f in self.phone_field.split(",") if f.strip()]:
+                        v = str(getattr(doc, pf, "") or "")
+                        if v:
+                            phones.append(v)
+                    preview["person_phone"] = " / ".join(phones)
             except Exception as e:
                 preview["person_message"] = "Erro: {}".format(str(e))
 

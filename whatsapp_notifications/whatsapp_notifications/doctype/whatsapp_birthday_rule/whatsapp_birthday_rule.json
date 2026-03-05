@@ -94,8 +94,9 @@
         },
         {
             "fieldname": "phone_field",
-            "fieldtype": "Select",
-            "label": "Campo de Telefone"
+            "fieldtype": "Data",
+            "label": "Campo(s) de Telefone",
+            "description": "Um ou mais campos separados por vírgula (ex: contacto_1, contacto_2)"
         },
         {
             "fieldname": "name_field",
