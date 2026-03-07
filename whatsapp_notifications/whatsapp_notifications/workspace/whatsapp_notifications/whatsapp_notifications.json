@@ -51,6 +51,17 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Schedule Monitor",
+   "link_count": 0,
+   "link_to": "whatsapp-schedule-monitor",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Mensagens",

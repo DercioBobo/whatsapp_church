@@ -1,0 +1,20 @@
+{
+ "creation": "2026-03-07 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-03-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WhatsApp Notifications",
+ "name": "whatsapp-schedule-monitor",
+ "owner": "Administrator",
+ "page_name": "whatsapp-schedule-monitor",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "WhatsApp Schedule Monitor"
+}
