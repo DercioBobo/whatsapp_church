@@ -105,6 +105,7 @@ doc_events = {
     "*": {
         "after_insert": "whatsapp_notifications.whatsapp_notifications.events.handle_after_insert",
         "on_update": "whatsapp_notifications.whatsapp_notifications.events.handle_on_update",
+        "on_change": "whatsapp_notifications.whatsapp_notifications.events.handle_on_change",
         "on_submit": "whatsapp_notifications.whatsapp_notifications.events.handle_on_submit",
         "on_cancel": "whatsapp_notifications.whatsapp_notifications.events.handle_on_cancel",
         "on_trash": "whatsapp_notifications.whatsapp_notifications.events.handle_on_trash",

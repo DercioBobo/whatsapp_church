@@ -70,6 +70,11 @@ def handle_on_update(doc, method=None):
     check_workflow_state_for_approval(doc)
 
 
+def handle_on_change(doc, method=None):
+    """Handle on_change event for all DocTypes"""
+    process_event(doc, "on_change")
+
+
 def handle_on_submit(doc, method=None):
     """Handle on_submit event for all DocTypes"""
     process_event(doc, "on_submit")
