@@ -53,13 +53,13 @@ class WhatsAppBirthdayRule(Document):
                 frappe.throw(_("Invalid {}: {}").format(label, str(e)))
 
     def is_time_to_send(self):
-        """Check if it's time to send (within 30-minute window after send_time)"""
+        """Check if it's time to send (within 60-minute window after send_time)"""
         if not self.send_time:
             return False
         now = now_datetime()
         send_time = get_datetime("{} {}".format(today(), self.send_time))
         diff_minutes = (now - send_time).total_seconds() / 60
-        return 0 <= diff_minutes <= 30
+        return 0 <= diff_minutes < 60
 
     def was_run_today(self):
         """Check if this rule already ran today"""

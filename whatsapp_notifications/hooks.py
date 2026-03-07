@@ -131,8 +131,8 @@ scheduler_events = {
             "whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_auto_report.whatsapp_auto_report.process_auto_reports",
             "whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.processar_avisos_agendados"
         ],
-        # Process birthday rules every hour (at the top of the hour)
-        "0 * * * *": [
+        # Process birthday rules every 30 minutes
+        "*/30 * * * *": [
             "whatsapp_notifications.whatsapp_notifications.tasks.process_birthday_rules"
         ],
         # Cleanup old logs daily at 2 AM
