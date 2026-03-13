@@ -2,7 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 
-class EnvioEmMassaWhatsApp(Document):
+class EnvioemMassaWhatsApp(Document):
 
     @frappe.whitelist()
     def retomar(self):
