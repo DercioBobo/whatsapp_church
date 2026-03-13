@@ -102,6 +102,15 @@ function render_mensagem_area(frm) {
                     </svg>
                     Anexar Ficheiro
                 </button>
+                <button class="wa-table-helper-btn" title="Auxiliar de Tabela"
+                    style="display: flex; align-items: center; gap: 6px; padding: 6px 14px;
+                    border: 1px solid #ccc; border-radius: 16px; background: white;
+                    color: #555; font-size: 12px; cursor: pointer;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#555">
+                        <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM10 7H6v3h4V7zm0 4H6v3h4v-3zm5-4h-3v3h3V7zm0 4h-3v3h3v-3zm3-4h-2v3h2V7zm0 4h-2v3h2v-3z"/>
+                    </svg>
+                    Tabela
+                </button>
                 ${frm.doc.anexo ? `
                 <div class="wa-attachment-preview" style="display: flex; align-items: center; gap: 6px;
                     padding: 4px 10px; background: #e8f5e9; border-radius: 12px; font-size: 12px;">
@@ -155,6 +164,9 @@ function render_mensagem_area(frm) {
         });
         $w.find('.wa-template-help-btn').on('click', function () {
             show_template_help();
+        });
+        $w.find('.wa-table-helper-btn').on('click', function () {
+            frappe.whatsapp.open_table_helper();
         });
         $w.find('.wa-attach-btn').on('click', function () {
             new frappe.ui.FileUploader({

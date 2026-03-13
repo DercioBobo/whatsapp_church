@@ -667,7 +667,17 @@ function _build_compose(frm) {
     $send.on('click', do_send);
     $ta.on('keydown', e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); do_send(); } });
 
-    $bar.append($attach_btn, $input_wrap, $send);
+    // ── Table helper button
+    let $table_btn = $(`
+        <button class="wa-icon-btn" title="Auxiliar de Tabela">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM10 7H6v3h4V7zm0 4H6v3h4v-3zm5-4h-3v3h3V7zm0 4h-3v3h3v-3zm3-4h-2v3h2V7zm0 4h-2v3h2v-3z"/>
+            </svg>
+        </button>
+    `);
+    $table_btn.on('click', () => frappe.whatsapp.open_table_helper());
+
+    $bar.append($attach_btn, $table_btn, $input_wrap, $send);
     return $bar;
 }
 
