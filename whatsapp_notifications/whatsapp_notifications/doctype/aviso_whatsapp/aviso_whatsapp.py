@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 import json
+import random
+import time
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
@@ -213,15 +215,15 @@ def processar_avisos_agendados():
             "whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp._executar_aviso_agendado",
             aviso_name=aviso.name,
             queue="long",
-            timeout=600
+            timeout=14400  # 4 hours
         )
 
 
-def _executar_aviso_agendado(aviso_name):
-    """Worker function: load doc and call enviar_agora."""
+def _executar_aviso_agendado(aviso_name, disparado_por="Agendado"):
+    """Background worker: load doc and run the send loop."""
     try:
         doc = frappe.get_doc("Aviso WhatsApp", aviso_name)
-        doc.enviar_agora(disparado_por="Agendado")
+        doc._enviar(disparado_por=disparado_por)
     except Exception:
         frappe.log_error(
             message=frappe.get_traceback(),
@@ -250,29 +252,52 @@ class AvisoWhatsApp(Document):
 
     @frappe.whitelist()
     def enviar_agora(self, disparado_por="Manual"):
-        """Resolve all fontes → phone list, send messages, write historico."""
+        """Validate, mark as Enviando, and queue a background send job."""
         if self.status == "Enviando":
             frappe.throw(_("Envio já em curso."))
 
         if not self.mensagem and not self.anexo:
             frappe.throw(_("Escreva a mensagem ou anexe um ficheiro."))
 
-        from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp, send_whatsapp_media
-
         self.db_set("status", "Enviando")
         frappe.db.commit()
+
+        frappe.enqueue(
+            "whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp._executar_aviso_agendado",
+            aviso_name=self.name,
+            disparado_por=disparado_por,
+            queue="long",
+            timeout=14400  # 4 hours — supports 900+ contacts with rate limiting
+        )
+        return {"success": True, "queued": True}
+
+    def _enviar(self, disparado_por="Manual"):
+        """Background worker: send to all recipients with optional rate limiting."""
+        from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp, send_whatsapp_media
+        from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
 
         destinatarios = self.resolver_destinatarios()
         if not destinatarios:
             self.db_set("status", "Rascunho")
             frappe.db.commit()
-            frappe.throw(_("Nenhum destinatário encontrado nas fontes configuradas."))
+            return
+
+        # Rate limiting: read from Evolution API Settings
+        settings = get_settings()
+        rate_limit_on = settings.get("enable_rate_limiting")
+        msgs_per_min = max(1, settings.get("messages_per_minute") or 20)
+        # Base delay in seconds between messages (randomised ±25% to look human)
+        delay_base = (60.0 / msgs_per_min) if rate_limit_on else 0
 
         enviados = 0
         falhados = 0
         has_attachment = bool(self.anexo)
 
-        for dest in destinatarios:
+        for i, dest in enumerate(destinatarios):
+            # Apply delay before every message except the first
+            if i > 0 and delay_base:
+                time.sleep(delay_base * random.uniform(0.75, 1.25))
+
             contacto = dest.get("contacto", "").strip()
             if not contacto:
                 falhados += 1
@@ -321,14 +346,10 @@ class AvisoWhatsApp(Document):
             self.db_set("proximo_envio", proximo)
             self.db_set("status", novo_status)
         else:
-            if self.tipo_envio == "Agora":
-                new_status = "Enviado" if falhados == 0 else ("Enviado" if enviados > 0 else "Enviado")
-            else:
-                new_status = "Conclu\u00eddo"
+            new_status = "Enviado" if self.tipo_envio == "Agora" else "Concluído"
             self.db_set("status", new_status)
 
         frappe.db.commit()
-        return {"enviados": enviados, "falhados": falhados, "total": len(destinatarios)}
 
     @frappe.whitelist()
     def agendar(self):

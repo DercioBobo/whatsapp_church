@@ -1685,15 +1685,12 @@ function do_enviar_agora(frm) {
                     freeze: true,
                     freeze_message: 'Enviando mensagens WhatsApp... Aguarde.',
                     callback: function (r) {
-                        if (r.message) {
-                            frm.reload_doc();
-                            let indicator = r.message.falhados === 0 ? 'green' :
-                                (r.message.enviados === 0 ? 'red' : 'orange');
+                        frm.reload_doc();
+                        if (r.message && r.message.queued) {
                             frappe.show_alert({
-                                message: __('{0} enviado(s), {1} falhado(s) de {2}.',
-                                    [r.message.enviados, r.message.falhados, r.message.total]),
-                                indicator: indicator
-                            }, 10);
+                                message: __('Envio iniciado em segundo plano. O estado será atualizado quando terminar.'),
+                                indicator: 'blue'
+                            }, 8);
                         }
                     }
                 });
