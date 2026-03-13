@@ -111,6 +111,21 @@ function render_mensagem_area(frm) {
                     </svg>
                     Tabela
                 </button>
+                <button class="wa-fmt-bullet-btn" title="Lista com pontos"
+                    style="border:none;background:none;color:#667781;font-size:15px;cursor:pointer;
+                    padding:4px 7px;border-radius:10px;">•</button>
+                <button class="wa-fmt-dash-btn" title="Lista com traços"
+                    style="border:none;background:none;color:#667781;font-size:15px;cursor:pointer;
+                    padding:4px 7px;border-radius:10px;">–</button>
+                <button class="wa-fmt-arrow-btn" title="Lista com setas"
+                    style="border:none;background:none;color:#667781;font-size:15px;cursor:pointer;
+                    padding:4px 7px;border-radius:10px;">→</button>
+                <button class="wa-fmt-num-btn" title="Lista numerada"
+                    style="border:none;background:none;color:#667781;font-size:12px;cursor:pointer;
+                    padding:4px 7px;border-radius:10px;">1.</button>
+                <button class="wa-fmt-emoji-btn" title="Inserir emoji"
+                    style="border:none;background:none;font-size:16px;cursor:pointer;
+                    padding:4px 7px;border-radius:10px;">😊</button>
                 ${frm.doc.anexo ? `
                 <div class="wa-attachment-preview" style="display: flex; align-items: center; gap: 6px;
                     padding: 4px 10px; background: #e8f5e9; border-radius: 12px; font-size: 12px;">
@@ -167,6 +182,21 @@ function render_mensagem_area(frm) {
         });
         $w.find('.wa-table-helper-btn').on('click', function () {
             frappe.whatsapp.open_table_helper();
+        });
+        $w.find('.wa-fmt-bullet-btn').on('click', function () {
+            _wa_prefix_lines($w.find('.wa-message-input'), () => '• ');
+        });
+        $w.find('.wa-fmt-dash-btn').on('click', function () {
+            _wa_prefix_lines($w.find('.wa-message-input'), () => '- ');
+        });
+        $w.find('.wa-fmt-arrow-btn').on('click', function () {
+            _wa_prefix_lines($w.find('.wa-message-input'), () => '→ ');
+        });
+        $w.find('.wa-fmt-num-btn').on('click', function () {
+            _wa_prefix_lines($w.find('.wa-message-input'), (i) => (i + 1) + '. ');
+        });
+        $w.find('.wa-fmt-emoji-btn').on('click', function () {
+            _wa_open_emoji_picker($(this), $w.find('.wa-message-input'));
         });
         $w.find('.wa-attach-btn').on('click', function () {
             new frappe.ui.FileUploader({
@@ -1808,58 +1838,111 @@ if (!frappe.whatsapp.open_table_helper) {
         });
     };
 
-    function _wa_build_table(raw, has_header) {
-        let lines = raw.split('\n');
-        while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-        if (!lines.length) return '';
+}
 
-        let sep = '\t';
-        let sample = lines[0];
-        if (sample.indexOf('\t') === -1) {
-            if (sample.indexOf(',') !== -1) sep = ',';
-            else if (sample.indexOf('|') !== -1) sep = '|';
-            else sep = null;
-        }
-
-        let rows = lines.map(line => {
-            if (!sep) return [line.trim()];
-            if (sep === ',') return _wa_parse_csv_line(line);
-            return line.split(sep).map(c => c.trim());
-        });
-
-        let max_cols = Math.max(...rows.map(r => r.length));
-        rows = rows.map(r => { while (r.length < max_cols) r.push(''); return r; });
-
-        let col_widths = Array(max_cols).fill(0);
-        rows.forEach(row => row.forEach((cell, i) => {
-            col_widths[i] = Math.max(col_widths[i], cell.length);
-        }));
-
-        let out = [];
-        rows.forEach((row, idx) => {
-            out.push(row.map((cell, i) => cell.padEnd(col_widths[i])).join(' | '));
-            if (has_header && idx === 0) {
-                out.push(col_widths.map(w => '-'.repeat(w)).join('-+-'));
-            }
-        });
-
-        return '```\n' + out.join('\n') + '\n```';
+function _wa_build_table(raw, has_header) {
+    let lines = raw.split('\n');
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (!lines.length) return '';
+    let sep = '\t';
+    let sample = lines[0];
+    if (sample.indexOf('\t') === -1) {
+        if (sample.indexOf(',') !== -1) sep = ',';
+        else if (sample.indexOf('|') !== -1) sep = '|';
+        else sep = null;
     }
-
-    function _wa_parse_csv_line(line) {
-        let result = [], current = '', in_quotes = false;
-        for (let i = 0; i < line.length; i++) {
-            let ch = line[i];
-            if (ch === '"') {
-                if (in_quotes && line[i + 1] === '"') { current += '"'; i++; }
-                else { in_quotes = !in_quotes; }
-            } else if (ch === ',' && !in_quotes) {
-                result.push(current.trim()); current = '';
-            } else {
-                current += ch;
-            }
+    let rows = lines.map(line => {
+        if (!sep) return [line.trim()];
+        if (sep === ',') return _wa_parse_csv_line(line);
+        return line.split(sep).map(c => c.trim());
+    });
+    let max_cols = Math.max(...rows.map(r => r.length));
+    rows = rows.map(r => { while (r.length < max_cols) r.push(''); return r; });
+    let col_widths = Array(max_cols).fill(0);
+    rows.forEach(row => row.forEach((cell, i) => {
+        col_widths[i] = Math.max(col_widths[i], cell.length);
+    }));
+    let out = [];
+    rows.forEach((row, idx) => {
+        out.push(row.map((cell, i) => cell.padEnd(col_widths[i])).join(' | '));
+        if (has_header && idx === 0) {
+            out.push(col_widths.map(w => '-'.repeat(w)).join('-+-'));
         }
-        result.push(current.trim());
-        return result;
+    });
+    return '```\n' + out.join('\n') + '\n```';
+}
+
+function _wa_parse_csv_line(line) {
+    let result = [], current = '', in_quotes = false;
+    for (let i = 0; i < line.length; i++) {
+        let ch = line[i];
+        if (ch === '"') {
+            if (in_quotes && line[i + 1] === '"') { current += '"'; i++; }
+            else { in_quotes = !in_quotes; }
+        } else if (ch === ',' && !in_quotes) {
+            result.push(current.trim()); current = '';
+        } else {
+            current += ch;
+        }
     }
+    result.push(current.trim());
+    return result;
+}
+
+function _wa_prefix_lines($ta, prefix_fn) {
+    let el = $ta[0];
+    if (!el) return;
+    let val = el.value;
+    let ss = el.selectionStart, se = el.selectionEnd;
+    let ls = val.lastIndexOf('\n', ss - 1) + 1;
+    let le = val.indexOf('\n', se);
+    if (le === -1) le = val.length;
+    let lines = val.substring(ls, le).split('\n');
+    let new_block = lines.map((line, i) => prefix_fn(i) + line).join('\n');
+    el.value = val.substring(0, ls) + new_block + val.substring(le);
+    $ta.trigger('input').trigger('change');
+    el.focus();
+}
+
+function _wa_open_emoji_picker($anchor, $ta) {
+    $('.wa-emoji-picker-pop').remove();
+    const EMOJIS = [
+        '😀','😂','😊','😍','🥰','😘','😎','😇','🤔','😅','😆','😁',
+        '🙏','👍','👎','❤️','🔥','✨','🎉','🎊','🎁','🎂','🎈','🌟',
+        '💯','👏','🤝','💪','🙌','🌹','🌷','🌸','🌺','🍀','🌙','⭐',
+        '🌈','🌞','⚡','💫','🎵','🎶','📱','💻','📷','🏠','🚀','✈️',
+        '🚗','⛪','📖','✝️','🕊️','💝','💖','💗','💓','💞','💕',
+        '🙂','😉','🥹','😢','😭','😤','🤗','🥳','😴','🤩','🫶','🫂',
+    ];
+    let $picker = $('<div class="wa-emoji-picker-pop"></div>').css({
+        position: 'fixed', background: '#fff', border: '1px solid #e0e0e0',
+        borderRadius: '10px', padding: '8px',
+        display: 'grid', gridTemplateColumns: 'repeat(9, 30px)', gap: '2px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.18)', zIndex: 10000,
+        maxHeight: '200px', overflowY: 'auto',
+    });
+    EMOJIS.forEach(emoji => {
+        let $e = $(`<button style="width:28px;height:28px;border:none;background:none;
+            cursor:pointer;font-size:18px;padding:0;border-radius:4px;">${emoji}</button>`);
+        $e.on('mouseenter', () => $e.css('background', '#f0f0f0'));
+        $e.on('mouseleave', () => $e.css('background', 'none'));
+        $e.on('click', function(ev) {
+            ev.stopPropagation();
+            let el = $ta[0], val = el.value, pos = el.selectionStart;
+            el.value = val.substring(0, pos) + emoji + val.substring(el.selectionEnd);
+            let new_pos = pos + [...emoji].length;
+            el.selectionStart = el.selectionEnd = new_pos;
+            $ta.trigger('input').trigger('change');
+            el.focus();
+            $picker.remove();
+        });
+        $picker.append($e);
+    });
+    $('body').append($picker);
+    let rect = $anchor[0].getBoundingClientRect();
+    let top = rect.top - 220;
+    if (top < 8) top = rect.bottom + 4;
+    let left = Math.min(rect.left, window.innerWidth - 300);
+    $picker.css({ top, left });
+    setTimeout(() => $(document).one('click.wa_emoji', () => $picker.remove()), 10);
 }

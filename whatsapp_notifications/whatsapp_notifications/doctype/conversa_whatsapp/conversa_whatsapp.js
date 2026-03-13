@@ -320,6 +320,25 @@ function _inject_css() {
         user-select: none;
     }
     .wa-template-row input[type=checkbox] { cursor: pointer; margin: 0; }
+    .wa-fmt-row {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px 8px 3px;
+    }
+    .wa-fmt-btn {
+        border: none;
+        background: none;
+        color: ${WA_C.text_meta};
+        font-size: 14px;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 10px;
+        min-width: 28px;
+        line-height: 1.4;
+        transition: background 0.15s, color 0.15s;
+    }
+    .wa-fmt-btn:hover { background: rgba(0,0,0,0.07); color: ${WA_C.dark_green}; }
     .wa-send-btn {
         width: 46px;
         height: 46px;
@@ -595,6 +614,26 @@ function _build_compose(frm) {
         this.style.height = Math.min(this.scrollHeight, 130) + 'px';
     });
     $input_wrap.append($ta);
+
+    // ── Formatting toolbar
+    let $fmt_row = $('<div class="wa-fmt-row"></div>');
+    const _FMT = [
+        { label: '•',  title: 'Lista com pontos',  fn: (i)   => '• '          },
+        { label: '–',  title: 'Lista com traços',  fn: (i)   => '- '          },
+        { label: '→',  title: 'Lista com setas',   fn: (i)   => '→ '          },
+        { label: '1.', title: 'Lista numerada',    fn: (i)   => (i + 1) + '. ' },
+        { label: '😊', title: 'Inserir emoji',     emoji: true                  },
+    ];
+    _FMT.forEach(({ label, title, fn, emoji }) => {
+        let $b = $(`<button class="wa-fmt-btn" title="${title}">${label}</button>`);
+        if (emoji) {
+            $b.on('click', function(e) { e.preventDefault(); _wa_open_emoji_picker($(this), $ta); });
+        } else {
+            $b.on('click', function(e) { e.preventDefault(); _wa_prefix_lines($ta, fn); });
+        }
+        $fmt_row.append($b);
+    });
+    $input_wrap.append($fmt_row);
 
     // Template toggle
     let $tpl_row  = $('<label class="wa-template-row"></label>');
@@ -1470,4 +1509,62 @@ function _wa_parse_csv_line(line) {
     }
     result.push(current.trim());
     return result;
+}
+
+function _wa_prefix_lines($ta, prefix_fn) {
+    let el = $ta[0];
+    let val = el.value;
+    let ss = el.selectionStart, se = el.selectionEnd;
+    // Expand to full lines
+    let ls = val.lastIndexOf('\n', ss - 1) + 1;
+    let le = val.indexOf('\n', se);
+    if (le === -1) le = val.length;
+    let lines = val.substring(ls, le).split('\n');
+    let new_block = lines.map((line, i) => prefix_fn(i) + line).join('\n');
+    el.value = val.substring(0, ls) + new_block + val.substring(le);
+    $ta.trigger('input').trigger('change');
+    el.focus();
+}
+
+function _wa_open_emoji_picker($anchor, $ta) {
+    $('.wa-emoji-picker-pop').remove();
+    const EMOJIS = [
+        '😀','😂','😊','😍','🥰','😘','😎','😇','🤔','😅','😆','😁',
+        '🙏','👍','👎','❤️','🔥','✨','🎉','🎊','🎁','🎂','🎈','🌟',
+        '💯','👏','🤝','💪','🙌','🌹','🌷','🌸','🌺','🍀','🌙','⭐',
+        '🌈','🌞','⚡','💫','🎵','🎶','📱','💻','📷','🏠','🚀','✈️',
+        '🚗','⛪','📖','✝️','🕊️','💝','💖','💗','💓','💞','💕',
+        '🙂','😉','🥹','😢','😭','😤','🤗','🥳','😴','🤩','🫶','🫂',
+    ];
+    let $picker = $('<div class="wa-emoji-picker-pop"></div>').css({
+        position: 'fixed', background: '#fff', border: '1px solid #e0e0e0',
+        borderRadius: '10px', padding: '8px',
+        display: 'grid', gridTemplateColumns: 'repeat(9, 30px)', gap: '2px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.18)', zIndex: 10000,
+        maxHeight: '200px', overflowY: 'auto',
+    });
+    EMOJIS.forEach(emoji => {
+        let $e = $(`<button style="width:28px;height:28px;border:none;background:none;
+            cursor:pointer;font-size:18px;padding:0;border-radius:4px;">${emoji}</button>`);
+        $e.on('mouseenter', () => $e.css('background', '#f0f0f0'));
+        $e.on('mouseleave', () => $e.css('background', 'none'));
+        $e.on('click', function(ev) {
+            ev.stopPropagation();
+            let el = $ta[0], val = el.value, pos = el.selectionStart;
+            el.value = val.substring(0, pos) + emoji + val.substring(el.selectionEnd);
+            let new_pos = pos + [...emoji].length;
+            el.selectionStart = el.selectionEnd = new_pos;
+            $ta.trigger('input').trigger('change');
+            el.focus();
+            $picker.remove();
+        });
+        $picker.append($e);
+    });
+    $('body').append($picker);
+    let rect = $anchor[0].getBoundingClientRect();
+    let top = rect.top - 220;
+    if (top < 8) top = rect.bottom + 4;
+    let left = Math.min(rect.left, window.innerWidth - 300);
+    $picker.css({ top, left });
+    setTimeout(() => $(document).one('click.wa_emoji', () => $picker.remove()), 10);
 }
