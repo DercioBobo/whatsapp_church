@@ -20,6 +20,7 @@
         "filtro_campo",
         "filtro_operador",
         "filtro_valor",
+        "filtros",
         "section_manual",
         "numeros",
         "section_grupo",
@@ -113,6 +114,13 @@
             "fieldname": "filtro_valor",
             "fieldtype": "Data",
             "label": "Valor de Filtro"
+        },
+        {
+            "fieldname": "filtros",
+            "fieldtype": "Long Text",
+            "label": "Filtros",
+            "hidden": 1,
+            "description": "JSON array of {campo, operador, valor} objects"
         },
         {
             "fieldname": "section_manual",

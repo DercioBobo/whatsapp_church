@@ -91,18 +91,40 @@ def _parse_numero_nome(line):
     return line, ''
 
 
-def _build_extra_filter(fonte):
-    """Build a Frappe filter tuple from filtro_campo / filtro_operador / filtro_valor."""
+def _build_extra_filters(fonte):
+    """Return list of Frappe filter tuples from filtros JSON or legacy fields."""
+    # Try new filtros JSON field first
+    filtros_json = getattr(fonte, "filtros", None)
+    if filtros_json:
+        try:
+            filtros = json.loads(filtros_json)
+            result = []
+            for f in filtros:
+                campo = (f.get("campo") or "").strip()
+                if not campo:
+                    continue
+                op = (f.get("operador") or "=").strip()
+                valor = (f.get("valor") or "")
+                if op == "is not set":
+                    result.append([campo, "is", "not set"])
+                elif op == "is set":
+                    result.append([campo, "is", "set"])
+                else:
+                    result.append([campo, op, valor])
+            return result
+        except Exception:
+            pass
+    # Backward compat: read legacy single filter fields
     campo = getattr(fonte, "filtro_campo", None)
     if not campo:
-        return None
+        return []
     op = (getattr(fonte, "filtro_operador", None) or "=").strip()
     valor = getattr(fonte, "filtro_valor", None) or ""
     if op == "is not set":
-        return [campo, "is", "not set"]
+        return [[campo, "is", "not set"]]
     if op == "is set":
-        return [campo, "is", "set"]
-    return [campo, op, valor]
+        return [[campo, "is", "set"]]
+    return [[campo, op, valor]]
 
 
 def resolver_fontes_list(fontes):
@@ -429,9 +451,8 @@ class AvisoWhatsApp(Document):
             filters = []
             if fonte.filtro_status:
                 filters.append(["status", "=", fonte.filtro_status])
-            extra = _build_extra_filter(fonte)
-            if extra:
-                filters.append(extra)
+            for f in _build_extra_filters(fonte):
+                filters.append(f)
             if fonte.nome_registo:
                 records = [frappe.get_doc("Catecumeno", fonte.nome_registo)] if frappe.db.exists("Catecumeno", fonte.nome_registo) else []
             else:
@@ -448,9 +469,8 @@ class AvisoWhatsApp(Document):
             filters = []
             if fonte.filtro_status:
                 filters.append(["status", "=", fonte.filtro_status])
-            extra = _build_extra_filter(fonte)
-            if extra:
-                filters.append(extra)
+            for f in _build_extra_filters(fonte):
+                filters.append(f)
             if fonte.nome_registo:
                 records = [frappe.get_doc("Catequista", fonte.nome_registo)] if frappe.db.exists("Catequista", fonte.nome_registo) else []
             else:
@@ -469,9 +489,8 @@ class AvisoWhatsApp(Document):
                 filters = []
                 if fonte.filtro_status:
                     filters.append(["status", "=", fonte.filtro_status])
-                extra = _build_extra_filter(fonte)
-                if extra:
-                    filters.append(extra)
+                for f in _build_extra_filters(fonte):
+                    filters.append(f)
                 turmas = frappe.get_list("Turma", filters=filters, fields=["name"], limit_page_length=0)
             for t in turmas:
                 try:
@@ -498,9 +517,8 @@ class AvisoWhatsApp(Document):
                 preps = [{"name": fonte.nome_registo}]
             else:
                 filters = []
-                extra = _build_extra_filter(fonte)
-                if extra:
-                    filters.append(extra)
+                for f in _build_extra_filters(fonte):
+                    filters.append(f)
                 preps = frappe.get_list("Preparacao do Sacramento", filters=filters, fields=["name"], limit_page_length=0)
             for p in preps:
                 try:
@@ -534,9 +552,8 @@ class AvisoWhatsApp(Document):
                 return []
             try:
                 filters = []
-                extra = _build_extra_filter(fonte)
-                if extra:
-                    filters.append(extra)
+                for f in _build_extra_filters(fonte):
+                    filters.append(f)
                 if fonte.usar_child_table and fonte.child_table_field and fonte.campo_contacto_child:
                     # Get parent records
                     parents = frappe.get_list(fonte.doctype_fonte, filters=filters, fields=["name"], limit_page_length=0)

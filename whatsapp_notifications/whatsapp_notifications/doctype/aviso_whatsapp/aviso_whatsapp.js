@@ -376,7 +376,7 @@ function render_destinatarios_area(frm) {
         let fonte_data = {};
         ['tipo_fonte','filtro_status','nome_registo','incluir_padrinhos',
          'numeros','doctype_fonte','campo_contacto','usar_child_table',
-         'child_table_field','campo_contacto_child','filtro_campo','filtro_operador','filtro_valor'
+         'child_table_field','campo_contacto_child','filtro_campo','filtro_operador','filtro_valor','filtros'
         ].forEach(function (k) { fonte_data[k] = fonte_row[k] || ''; });
 
         frappe.call({
@@ -860,32 +860,20 @@ function show_catechism_picker_dialog(frm, tipo) {
     dialog_fields.push({
         fieldname: 'section_filtro_extra',
         fieldtype: 'Section Break',
-        label: 'Filtro Adicional (opcional)',
+        label: 'Filtros Adicionais (opcional)',
         collapsible: 1
     });
     dialog_fields.push({
-        fieldname: 'filtro_campo',
-        fieldtype: 'Select',
-        label: 'Campo',
-        options: '',
-        description: 'Seleccione ap\u00f3s carregar os campos'
-    });
-    dialog_fields.push({
-        fieldname: 'filtro_operador',
-        fieldtype: 'Select',
-        label: 'Operador',
-        options: '=\n!=\nis set\nis not set\nlike\nnot like\n>\n<',
-        default: '='
-    });
-    dialog_fields.push({
-        fieldname: 'filtro_valor',
-        fieldtype: 'Data',
-        label: 'Valor'
+        fieldname: 'filtros_html',
+        fieldtype: 'HTML',
+        options: '<div class="wa-filtros-builder" style="padding:4px 0;"></div>'
     });
     dialog_fields.push({ fieldname: 'preview_resultado_html', fieldtype: 'HTML' });
     dialog_fields.push({ fieldname: 'section_lista', fieldtype: 'Section Break', label: 'Seleccionar Registo' });
     dialog_fields.push({ fieldname: 'search', fieldtype: 'Data', placeholder: 'Pesquisar...' });
     dialog_fields.push({ fieldname: 'list_html', fieldtype: 'HTML' });
+
+    let filter_builder = null;
 
     let dialog = new frappe.ui.Dialog({
         title: 'Seleccionar Fonte: ' + tipo,
@@ -894,24 +882,23 @@ function show_catechism_picker_dialog(frm, tipo) {
         primary_action_label: 'Adicionar Fonte',
         primary_action: function () {
             let values = dialog.get_values() || {};
-            let filtro_campo_val = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
+            let filtros = filter_builder ? filter_builder.get_filters() : [];
             dialog.hide();
             let fonte_data = {
                 tipo_fonte: tipo,
                 filtro_status: values.filtro_status || '',
                 nome_registo: selected_name || '',
                 incluir_padrinhos: values.incluir_padrinhos || 0,
-                filtro_campo: filtro_campo_val,
-                filtro_operador: values.filtro_operador || '=',
-                filtro_valor: values.filtro_valor || ''
+                filtros: JSON.stringify(filtros),
+                filtro_campo: '',
+                filtro_operador: '=',
+                filtro_valor: ''
             };
             fonte_data.descricao = build_descricao(tipo, {
                 filtro_status: fonte_data.filtro_status,
                 nome_registo: fonte_data.nome_registo,
                 incluir_padrinhos: fonte_data.incluir_padrinhos,
-                filtro_campo: fonte_data.filtro_campo,
-                filtro_operador: fonte_data.filtro_operador,
-                filtro_valor: fonte_data.filtro_valor,
+                filtros: fonte_data.filtros,
                 _display: selected_display
             });
             add_fonte_to_frm(frm, fonte_data);
@@ -1024,21 +1011,15 @@ function show_catechism_picker_dialog(frm, tipo) {
     }
 
     function do_preview_filter() {
-        let filtro_campo_val = (dialog.get_value('filtro_campo') || '').split(' \u2014 ')[0].trim();
-        let filtro_op = dialog.get_value('filtro_operador') || '=';
-        let filtro_val = dialog.get_value('filtro_valor') || '';
-        if (!filtro_campo_val) {
-            dialog.fields_dict.preview_resultado_html.$wrapper.html('');
-            return;
-        }
+        if (!filter_builder) return;
+        let filtros = filter_builder.get_filters();
+        let filtro_status_val = has_status_filter ? (dialog.get_value('filtro_status') || '') : '';
         let preview_fonte = {
             tipo_fonte: tipo,
-            filtro_status: has_status_filter ? (dialog.get_value('filtro_status') || '') : '',
+            filtro_status: filtro_status_val,
             nome_registo: selected_name || '',
             incluir_padrinhos: dialog.get_value('incluir_padrinhos') || 0,
-            filtro_campo: filtro_campo_val,
-            filtro_operador: filtro_op,
-            filtro_valor: filtro_val
+            filtros: JSON.stringify(filtros),
         };
         dialog.fields_dict.preview_resultado_html.$wrapper.html(
             '<div style="padding:6px 0;color:' + WA_COLORS.grey_text + ';font-size:12px;">A calcular...</div>'
@@ -1080,40 +1061,35 @@ function show_catechism_picker_dialog(frm, tipo) {
         }
     });
 
-    // Load all fields for the filter campo picker
+    // Load all fields for the filter builder datalist
     frappe.call({
         method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_doctype_all_fields',
         args: { doctype: api_tipo },
         callback: function (r) {
             if (r.message && r.message.length) {
-                let opts = '\n' + r.message.map(function (f) {
-                    return f.fieldname + (f.label && f.label !== f.fieldname ? ' \u2014 ' + f.label : '');
-                }).join('\n');
-                dialog.fields_dict.filtro_campo.df.options = opts;
-                dialog.fields_dict.filtro_campo.refresh();
+                if (filter_builder) filter_builder.set_fields(r.message);
             }
         }
     });
 
+    let _preview_timer = null;
+    function _debounce_preview() {
+        clearTimeout(_preview_timer);
+        _preview_timer = setTimeout(do_preview_filter, 600);
+    }
+
     dialog.show();
 
-    // Operator change: hide value field when not needed
+    setTimeout(function() {
+        let init_filters = [];
+        filter_builder = _wa_init_filter_builder(
+            dialog.$wrapper.find('.wa-filtros-builder'),
+            init_filters,
+            _debounce_preview
+        );
+    }, 100);
+
     setTimeout(function () {
-        if (dialog.fields_dict.filtro_operador) {
-            dialog.fields_dict.filtro_operador.$input.on('change', function () {
-                let op = $(this).val();
-                let hide = ['is set', 'is not set'].includes(op);
-                dialog.set_df_property('filtro_valor', 'hidden', hide ? 1 : 0);
-                if (hide) dialog.set_value('filtro_valor', '');
-                do_preview_filter();
-            });
-        }
-        if (dialog.fields_dict.filtro_campo) {
-            dialog.fields_dict.filtro_campo.$input.on('change', function () { do_preview_filter(); });
-        }
-        if (dialog.fields_dict.filtro_valor) {
-            dialog.fields_dict.filtro_valor.$input.on('change blur', function () { do_preview_filter(); });
-        }
         if (dialog.fields_dict.search) dialog.fields_dict.search.$input.focus();
     }, 300);
 }
@@ -1174,28 +1150,13 @@ function show_doctype_fonte_dialog(frm) {
             {
                 fieldname: 'section_filter',
                 fieldtype: 'Section Break',
-                label: 'Filtro (opcional)',
+                label: 'Filtros (opcional)',
                 collapsible: 1
             },
             {
-                fieldname: 'filtro_campo',
-                fieldtype: 'Select',
-                label: 'Campo de Filtro',
-                options: '',
-                description: 'Seleccione ap\u00f3s escolher o DocType'
-            },
-            {
-                fieldname: 'filtro_operador',
-                fieldtype: 'Select',
-                label: 'Operador',
-                options: '=\n!=\nis set\nis not set\nlike\nnot like\n>\n<',
-                default: '='
-            },
-            {
-                fieldname: 'filtro_valor',
-                fieldtype: 'Data',
-                label: 'Valor do Filtro',
-                description: 'Deixe vazio para operadores "is set" / "is not set"'
+                fieldname: 'filtros_html',
+                fieldtype: 'HTML',
+                options: '<div class="wa-filtros-builder" style="padding:4px 0;"></div>'
             },
             {
                 fieldname: 'preview_resultado_html',
@@ -1215,7 +1176,7 @@ function show_doctype_fonte_dialog(frm) {
                 return;
             }
             dialog.hide();
-            let filtro_campo_val = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
+            let filtros = dt_filter_builder ? dt_filter_builder.get_filters() : [];
             add_fonte_to_frm(frm, {
                 tipo_fonte: 'DocType',
                 doctype_fonte: values.doctype_fonte,
@@ -1223,27 +1184,22 @@ function show_doctype_fonte_dialog(frm) {
                 usar_child_table: values.usar_child_table || 0,
                 child_table_field: values.child_table_field || '',
                 campo_contacto_child: values.campo_contacto_child || '',
-                filtro_campo: filtro_campo_val,
-                filtro_operador: values.filtro_operador || '=',
-                filtro_valor: values.filtro_valor || '',
+                filtros: JSON.stringify(filtros),
+                filtro_campo: '',
+                filtro_operador: '=',
+                filtro_valor: '',
                 descricao: build_descricao('DocType', Object.assign({}, values, {
-                    filtro_campo: filtro_campo_val,
-                    filtro_operador: values.filtro_operador || '='
+                    filtros: JSON.stringify(filtros)
                 }))
             });
         }
     });
 
+    let dt_filter_builder = null;
+
     function do_dt_preview_filter() {
         let dt = dialog.get_value('doctype_fonte');
         if (!dt) return;
-        let filtro_campo_val = (dialog.get_value('filtro_campo') || '').split(' \u2014 ')[0].trim();
-        if (!filtro_campo_val) {
-            dialog.fields_dict.preview_resultado_html.$wrapper.html('');
-            return;
-        }
-        let filtro_op = dialog.get_value('filtro_operador') || '=';
-        let filtro_val = dialog.get_value('filtro_valor') || '';
         let contact_field = dialog.get_value('usar_child_table')
             ? dialog.get_value('campo_contacto_child')
             : dialog.get_value('campo_contacto');
@@ -1251,6 +1207,7 @@ function show_doctype_fonte_dialog(frm) {
             dialog.fields_dict.preview_resultado_html.$wrapper.html('');
             return;
         }
+        let filtros = dt_filter_builder ? dt_filter_builder.get_filters() : [];
         let preview_fonte = {
             tipo_fonte: 'DocType',
             doctype_fonte: dt,
@@ -1258,9 +1215,7 @@ function show_doctype_fonte_dialog(frm) {
             usar_child_table: dialog.get_value('usar_child_table') || 0,
             child_table_field: dialog.get_value('child_table_field') || '',
             campo_contacto_child: contact_field,
-            filtro_campo: filtro_campo_val,
-            filtro_operador: filtro_op,
-            filtro_valor: filtro_val
+            filtros: JSON.stringify(filtros)
         };
         dialog.fields_dict.preview_resultado_html.$wrapper.html(
             '<div style="padding:6px 0;color:' + WA_COLORS.grey_text + ';font-size:12px;">A calcular...</div>'
@@ -1326,28 +1281,17 @@ function show_doctype_fonte_dialog(frm) {
             args: { doctype: dt },
             callback: function (r) {
                 if (r.message && r.message.length) {
-                    let opts = '\n' + r.message.map(function (f) {
-                        return f.fieldname + (f.label && f.label !== f.fieldname ? ' \u2014 ' + f.label : '');
-                    }).join('\n');
-                    dialog.fields_dict.filtro_campo.df.options = opts;
-                    dialog.fields_dict.filtro_campo.refresh();
+                    if (dt_filter_builder) dt_filter_builder.set_fields(r.message);
                 }
             }
         });
     }
 
-    // Watch operator to show/hide value field
-    setTimeout(function () {
-        dialog.fields_dict.filtro_operador.$input.on('change', function () {
-            let op = $(this).val();
-            let hide = ['is set', 'is not set'].includes(op);
-            dialog.set_df_property('filtro_valor', 'hidden', hide ? 1 : 0);
-            if (hide) dialog.set_value('filtro_valor', '');
-            do_dt_preview_filter();
-        });
-        dialog.fields_dict.filtro_campo.$input.on('change', function () { do_dt_preview_filter(); });
-        dialog.fields_dict.filtro_valor.$input.on('change blur', function () { do_dt_preview_filter(); });
-    }, 300);
+    let _dt_preview_timer = null;
+    function _dt_debounce_preview() {
+        clearTimeout(_dt_preview_timer);
+        _dt_preview_timer = setTimeout(do_dt_preview_filter, 600);
+    }
 
     // React to Link field selection (awesomplete) or manual entry (blur)
     dialog.fields_dict.doctype_fonte.$input.on('awesomplete-selectcomplete', function () {
@@ -1362,6 +1306,14 @@ function show_doctype_fonte_dialog(frm) {
     });
 
     dialog.show();
+
+    setTimeout(function() {
+        dt_filter_builder = _wa_init_filter_builder(
+            dialog.$wrapper.find('.wa-filtros-builder'),
+            [],
+            _dt_debounce_preview
+        );
+    }, 100);
 }
 
 // ============================================================
@@ -1540,14 +1492,19 @@ function show_grupo_fonte_dialog(frm) {
 }
 
 function _build_filtro_descricao(values) {
-    let campo = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
-    if (!campo) return '';
-    let op = values.filtro_operador || '=';
-    if (['is set', 'is not set'].includes(op)) {
-        return ' [' + campo + ' ' + op + ']';
+    let filtros = [];
+    try { filtros = JSON.parse(values.filtros || '[]'); } catch(e) { filtros = []; }
+    // Backward compat: fall back to old single filter fields
+    if (!filtros.length) {
+        let campo = (values.filtro_campo || '').split(' \u2014 ')[0].trim();
+        if (campo) filtros = [{ campo: campo, operador: values.filtro_operador || '=', valor: values.filtro_valor || '' }];
     }
-    let val = values.filtro_valor || '';
-    return val ? ' [' + campo + ' ' + op + ' ' + val + ']' : '';
+    if (!filtros.length) return '';
+    let parts = filtros.map(function(f) {
+        if (['is set', 'is not set'].includes(f.operador)) return '[' + f.campo + ' ' + f.operador + ']';
+        return f.valor ? '[' + f.campo + ' ' + f.operador + ' ' + f.valor + ']' : '[' + f.campo + ']';
+    });
+    return ' ' + parts.join(' & ');
 }
 
 function build_descricao(tipo, values) {
@@ -1942,4 +1899,88 @@ function _wa_open_emoji_picker($anchor, $ta) {
     let left = Math.min(rect.left, window.innerWidth - 300);
     $picker.css({ top, left });
     setTimeout(() => $(document).one('click.wa_emoji', () => $picker.remove()), 10);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Multi-filter builder widget
+// ─────────────────────────────────────────────────────────────────────
+function _wa_init_filter_builder($container, initial_filters, on_change) {
+    const OPS = ['=', '!=', 'is set', 'is not set', 'like', 'not like', '>', '<'];
+    let _fields = [];
+
+    function _op_html(sel) {
+        return '<select class="wa-fb-op form-control form-control-sm" style="min-width:105px;">' +
+            OPS.map(op => `<option value="${op}"${op === sel ? ' selected' : ''}>${op}</option>`).join('') +
+            '</select>';
+    }
+
+    function _add_row(campo, operador, valor) {
+        let uid = 'wafb' + Date.now() + Math.floor(Math.random() * 9999);
+        let no_val = ['is set', 'is not set'].includes(operador);
+        let $row = $(`
+        <div class="wa-fb-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+            <input type="text" class="wa-fb-campo form-control form-control-sm"
+                style="flex:2;min-width:0;" list="${uid}" placeholder="campo"
+                value="${frappe.utils.escape_html(campo || '')}">
+            <datalist id="${uid}"></datalist>
+            ${_op_html(operador || '=')}
+            <input type="text" class="wa-fb-val form-control form-control-sm"
+                style="flex:2;min-width:0;" placeholder="valor"
+                value="${frappe.utils.escape_html(valor || '')}"
+                ${no_val ? 'disabled' : ''}>
+            <button class="wa-fb-rem btn btn-xs" style="flex-shrink:0;color:#c62828;
+                background:none;border:1px solid #e0e0e0;padding:2px 7px;">×</button>
+        </div>`);
+
+        // Populate datalist with available fields
+        let $dl = $row.find('datalist');
+        _fields.forEach(f => $dl.append(`<option value="${f.fieldname}">${f.label || f.fieldname}</option>`));
+
+        $row.find('.wa-fb-op').on('change', function() {
+            let no_v = ['is set', 'is not set'].includes($(this).val());
+            $row.find('.wa-fb-val').prop('disabled', no_v).val(no_v ? '' : $row.find('.wa-fb-val').val());
+            if (on_change) on_change();
+        });
+        $row.find('.wa-fb-rem').on('click', function(e) { e.preventDefault(); $row.remove(); if (on_change) on_change(); });
+        $row.find('.wa-fb-campo, .wa-fb-val').on('input change blur', function() { if (on_change) on_change(); });
+
+        $container.find('.wa-fb-rows').append($row);
+    }
+
+    $container.html(`
+        <div class="wa-fb-rows"></div>
+        <button class="wa-fb-add btn btn-xs btn-default" style="margin-top:4px;font-size:11px;">
+            + Adicionar filtro
+        </button>`);
+
+    $container.find('.wa-fb-add').on('click', function(e) {
+        e.preventDefault();
+        _add_row('', '=', '');
+    });
+
+    (initial_filters || []).forEach(f => _add_row(f.campo, f.operador, f.valor));
+
+    return {
+        get_filters: function() {
+            let out = [];
+            $container.find('.wa-fb-row').each(function() {
+                let campo = $(this).find('.wa-fb-campo').val().trim();
+                if (!campo) return;
+                out.push({
+                    campo: campo,
+                    operador: $(this).find('.wa-fb-op').val() || '=',
+                    valor: $(this).find('.wa-fb-val').val().trim()
+                });
+            });
+            return out;
+        },
+        set_fields: function(fields) {
+            _fields = fields;
+            $container.find('.wa-fb-row').each(function() {
+                let $dl = $(this).find('datalist');
+                $dl.empty();
+                fields.forEach(f => $dl.append(`<option value="${f.fieldname}">${f.label || f.fieldname}</option>`));
+            });
+        }
+    };
 }
