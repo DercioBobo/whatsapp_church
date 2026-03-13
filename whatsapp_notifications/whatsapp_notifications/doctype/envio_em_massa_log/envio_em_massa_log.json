@@ -5,18 +5,66 @@
     "doctype": "DocType",
     "engine": "InnoDB",
     "field_order": [
-        "envio", "numero", "nome", "origem", "status",
-        "mensagem_renderizada", "enviado_em", "erro"
+        "envio",
+        "numero",
+        "nome",
+        "origem",
+        "status",
+        "mensagem_renderizada",
+        "enviado_em",
+        "erro"
     ],
     "fields": [
-        {"fieldname": "envio", "fieldtype": "Link", "label": "Envio", "options": "Envio em Massa WhatsApp", "reqd": 1, "in_list_view": 1},
-        {"fieldname": "numero", "fieldtype": "Data", "label": "N\u00famero", "in_list_view": 1},
-        {"fieldname": "nome", "fieldtype": "Data", "label": "Nome", "in_list_view": 1},
-        {"fieldname": "origem", "fieldtype": "Data", "label": "Origem", "in_list_view": 1},
-        {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Pendente\nEnviado\nFalhado", "in_list_view": 1, "default": "Pendente"},
-        {"fieldname": "mensagem_renderizada", "fieldtype": "Long Text", "label": "Mensagem Renderizada", "hidden": 1},
-        {"fieldname": "enviado_em", "fieldtype": "Datetime", "label": "Enviado Em"},
-        {"fieldname": "erro", "fieldtype": "Small Text", "label": "Erro"}
+        {
+            "fieldname": "envio",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Envio",
+            "options": "Envio em Massa WhatsApp",
+            "reqd": 1
+        },
+        {
+            "fieldname": "numero",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "N\u00famero"
+        },
+        {
+            "fieldname": "nome",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Nome"
+        },
+        {
+            "fieldname": "origem",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Origem"
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Status",
+            "options": "Pendente\nEnviado\nFalhado",
+            "default": "Pendente"
+        },
+        {
+            "fieldname": "mensagem_renderizada",
+            "fieldtype": "Long Text",
+            "hidden": 1,
+            "label": "Mensagem Renderizada"
+        },
+        {
+            "fieldname": "enviado_em",
+            "fieldtype": "Datetime",
+            "label": "Enviado Em"
+        },
+        {
+            "fieldname": "erro",
+            "fieldtype": "Small Text",
+            "label": "Erro"
+        }
     ],
     "index_web_pages_for_search": 0,
     "istable": 0,
@@ -27,7 +75,13 @@
     "name": "Envio em Massa Log",
     "owner": "Administrator",
     "permissions": [
-        {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+        {
+            "create": 1,
+            "delete": 1,
+            "read": 1,
+            "role": "System Manager",
+            "write": 1
+        }
     ],
     "quick_entry": 0,
     "sort_field": "creation",

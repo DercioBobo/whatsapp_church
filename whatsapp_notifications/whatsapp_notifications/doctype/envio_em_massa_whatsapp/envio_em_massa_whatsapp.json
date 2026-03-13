@@ -1,34 +1,135 @@
 {
     "actions": [],
     "allow_rename": 0,
-    "autoname": "format:EMS-{YYYY}-{MM}-{#####}",
+    "autoname": "EMS-.YY.-.#####",
     "creation": "2026-03-13 00:00:00.000000",
     "doctype": "DocType",
     "engine": "InnoDB",
     "field_order": [
-        "aviso", "titulo", "status", "col_break_1",
-        "total", "enviados", "falhados", "pendentes", "disparado_por",
-        "section_progress", "iniciado_em", "concluido_em", "ultimo_heartbeat", "anexo",
-        "section_actions", "btn_retomar", "btn_ver_logs"
+        "aviso",
+        "titulo",
+        "status",
+        "col_break_1",
+        "total",
+        "enviados",
+        "falhados",
+        "pendentes",
+        "disparado_por",
+        "section_progress",
+        "iniciado_em",
+        "concluido_em",
+        "ultimo_heartbeat",
+        "anexo",
+        "section_actions",
+        "btn_retomar",
+        "btn_ver_logs"
     ],
     "fields": [
-        {"fieldname": "aviso", "fieldtype": "Link", "label": "Aviso WhatsApp", "options": "Aviso WhatsApp", "in_list_view": 1, "read_only": 1},
-        {"fieldname": "titulo", "fieldtype": "Data", "label": "T\u00edtulo", "in_list_view": 1, "read_only": 1},
-        {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Preparando\nEm Execu\u00e7\u00e3o\nConclu\u00eddo\nInterrompido\nFalhado", "in_list_view": 1, "read_only": 1, "default": "Preparando"},
-        {"fieldname": "col_break_1", "fieldtype": "Column Break"},
-        {"fieldname": "total", "fieldtype": "Int", "label": "Total", "in_list_view": 1, "read_only": 1},
-        {"fieldname": "enviados", "fieldtype": "Int", "label": "Enviados", "read_only": 1},
-        {"fieldname": "falhados", "fieldtype": "Int", "label": "Falhados", "read_only": 1},
-        {"fieldname": "pendentes", "fieldtype": "Int", "label": "Pendentes", "read_only": 1},
-        {"fieldname": "disparado_por", "fieldtype": "Data", "label": "Disparado Por", "read_only": 1},
-        {"fieldname": "section_progress", "fieldtype": "Section Break", "label": "Progresso"},
-        {"fieldname": "iniciado_em", "fieldtype": "Datetime", "label": "Iniciado Em", "read_only": 1},
-        {"fieldname": "concluido_em", "fieldtype": "Datetime", "label": "Conclu\u00eddo Em", "read_only": 1},
-        {"fieldname": "ultimo_heartbeat", "fieldtype": "Datetime", "label": "\u00daltimo Heartbeat", "read_only": 1, "hidden": 1},
-        {"fieldname": "anexo", "fieldtype": "Data", "label": "Anexo", "read_only": 1, "hidden": 1},
-        {"fieldname": "section_actions", "fieldtype": "Section Break", "label": "A\u00e7\u00f5es"},
-        {"fieldname": "btn_retomar", "fieldtype": "Button", "label": "Retomar Envio"},
-        {"fieldname": "btn_ver_logs", "fieldtype": "Button", "label": "Ver Logs"}
+        {
+            "fieldname": "aviso",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Aviso WhatsApp",
+            "options": "Aviso WhatsApp",
+            "read_only": 1
+        },
+        {
+            "fieldname": "titulo",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "T\u00edtulo",
+            "read_only": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Status",
+            "options": "Preparando\nEm Execu\u00e7\u00e3o\nConclu\u00eddo\nInterrompido\nFalhado",
+            "default": "Preparando",
+            "read_only": 1
+        },
+        {
+            "fieldname": "col_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "total",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Total",
+            "read_only": 1
+        },
+        {
+            "fieldname": "enviados",
+            "fieldtype": "Int",
+            "label": "Enviados",
+            "read_only": 1
+        },
+        {
+            "fieldname": "falhados",
+            "fieldtype": "Int",
+            "label": "Falhados",
+            "read_only": 1
+        },
+        {
+            "fieldname": "pendentes",
+            "fieldtype": "Int",
+            "label": "Pendentes",
+            "read_only": 1
+        },
+        {
+            "fieldname": "disparado_por",
+            "fieldtype": "Data",
+            "label": "Disparado Por",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_progress",
+            "fieldtype": "Section Break",
+            "label": "Progresso"
+        },
+        {
+            "fieldname": "iniciado_em",
+            "fieldtype": "Datetime",
+            "label": "Iniciado Em",
+            "read_only": 1
+        },
+        {
+            "fieldname": "concluido_em",
+            "fieldtype": "Datetime",
+            "label": "Conclu\u00eddo Em",
+            "read_only": 1
+        },
+        {
+            "fieldname": "ultimo_heartbeat",
+            "fieldtype": "Datetime",
+            "hidden": 1,
+            "label": "\u00daltimo Heartbeat",
+            "read_only": 1
+        },
+        {
+            "fieldname": "anexo",
+            "fieldtype": "Data",
+            "hidden": 1,
+            "label": "Anexo",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_actions",
+            "fieldtype": "Section Break",
+            "label": "A\u00e7\u00f5es"
+        },
+        {
+            "fieldname": "btn_retomar",
+            "fieldtype": "Button",
+            "label": "Retomar Envio"
+        },
+        {
+            "fieldname": "btn_ver_logs",
+            "fieldtype": "Button",
+            "label": "Ver Logs"
+        }
     ],
     "index_web_pages_for_search": 0,
     "istable": 0,
@@ -37,9 +138,16 @@
     "modified_by": "Administrator",
     "module": "WhatsApp Notifications",
     "name": "Envio em Massa WhatsApp",
+    "naming_rule": "Expression (old style)",
     "owner": "Administrator",
     "permissions": [
-        {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "submit": 0, "cancel": 0, "amend": 0}
+        {
+            "create": 1,
+            "delete": 1,
+            "read": 1,
+            "role": "System Manager",
+            "write": 1
+        }
     ],
     "quick_entry": 0,
     "sort_field": "creation",
