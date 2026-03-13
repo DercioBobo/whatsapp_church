@@ -168,6 +168,26 @@ def _render_mensagem_para_dest(mensagem, dest):
 
 
 @frappe.whitelist()
+def preview_mensagens(aviso_name, limit=5, offset=0):
+    """Resolve all recipients for a saved Aviso and return rendered messages for a page of them."""
+    doc = frappe.get_doc("Aviso WhatsApp", aviso_name)
+    all_recipients = doc.resolver_destinatarios()
+    total = len(all_recipients)
+    limit = int(limit)
+    offset = int(offset)
+    page = all_recipients[offset:offset + limit]
+    result = []
+    for dest in page:
+        result.append({
+            "nome": dest.get("nome", "") or "",
+            "contacto": dest.get("contacto", "") or "",
+            "origem": dest.get("origem", "") or "",
+            "mensagem": doc._render_mensagem(dest),
+        })
+    return {"recipients": result, "total": total, "offset": offset}
+
+
+@frappe.whitelist()
 def preview_fonte_destinatarios(fonte_json):
     """Return resolved phone numbers for a single fonte definition (preview before saving)."""
     fonte = frappe._dict(json.loads(fonte_json))

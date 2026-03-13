@@ -680,6 +680,99 @@ function render_acoes_area(frm) {
             do_enviar_agora(frm);
         });
     }
+
+    // Preview always available when there are fontes
+    if ((frm.doc.fontes || []).length > 0) {
+        frm.page.add_action_item(__('👁 Preview Mensagem'), function () {
+            show_preview_mensagem_dialog(frm);
+        });
+    }
+}
+
+// ============================================================
+// Preview Mensagem dialog
+// ============================================================
+function show_preview_mensagem_dialog(frm) {
+    // Save first if dirty so the server has the latest data
+    let do_preview = function (offset) {
+        let limit = 5;
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.preview_mensagens',
+            args: { aviso_name: frm.doc.name, limit: limit, offset: offset || 0 },
+            freeze: true,
+            freeze_message: __('A resolver destinatários e renderizar mensagens...'),
+            callback: function (r) {
+                let data = r.message || {};
+                let recipients = data.recipients || [];
+                let total = data.total || 0;
+                let shown_offset = data.offset || 0;
+
+                if (!recipients.length) {
+                    frappe.msgprint(__('Nenhum destinatário encontrado nas fontes configuradas.'));
+                    return;
+                }
+
+                let bubbles_html = recipients.map(function (rec) {
+                    let msg_html = frappe.utils.escape_html(rec.mensagem || '').replace(/\n/g, '<br>');
+                    return `
+                    <div style="margin-bottom:16px;">
+                        <div style="font-size:11px;color:#667781;margin-bottom:4px;display:flex;gap:8px;align-items:center;">
+                            <span style="font-weight:600;color:#075E54;">${frappe.utils.escape_html(rec.nome || '—')}</span>
+                            <span style="font-family:monospace;background:#f0f0f0;border-radius:4px;
+                                padding:1px 5px;font-size:10px;">${frappe.utils.escape_html(rec.contacto || '')}</span>
+                            ${rec.origem ? `<span style="color:#aaa;font-size:10px;">${frappe.utils.escape_html(rec.origem)}</span>` : ''}
+                        </div>
+                        <div style="background:#DCF8C6;border-radius:0 8px 8px 8px;padding:10px 14px;
+                            max-width:90%;display:inline-block;position:relative;">
+                            <div style="white-space:pre-wrap;font-size:13px;line-height:1.5;">${msg_html}</div>
+                            <div style="font-size:10px;color:#667781;text-align:right;margin-top:4px;">✓✓</div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                let showing_end = shown_offset + recipients.length;
+                let nav_html = `
+                <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding-top:10px;border-top:1px solid #eee;margin-top:4px;font-size:12px;color:#667781;">
+                    <span>Mostrando <b>${shown_offset + 1}–${showing_end}</b> de <b>${total}</b> destinatários</span>
+                    <div style="display:flex;gap:8px;">
+                        ${shown_offset > 0 ? `<button class="btn btn-xs btn-default wa-prev-preview"
+                            data-offset="${shown_offset - limit}">◀ Anteriores</button>` : ''}
+                        ${showing_end < total ? `<button class="btn btn-xs btn-default wa-next-preview"
+                            data-offset="${showing_end}">Próximos ▶</button>` : ''}
+                    </div>
+                </div>`;
+
+                let d = new frappe.ui.Dialog({
+                    title: __('Preview de Mensagem — {0} destinatários', [total]),
+                    fields: [{
+                        fieldtype: 'HTML',
+                        fieldname: 'preview_html',
+                        options: `<div style="background:#ECE5DD;border-radius:8px;padding:16px 14px;">
+                            ${bubbles_html}
+                        </div>${nav_html}`
+                    }],
+                    size: 'large'
+                });
+                d.show();
+
+                d.$wrapper.find('.wa-prev-preview').on('click', function () {
+                    d.hide();
+                    do_preview(parseInt($(this).data('offset')));
+                });
+                d.$wrapper.find('.wa-next-preview').on('click', function () {
+                    d.hide();
+                    do_preview(parseInt($(this).data('offset')));
+                });
+            }
+        });
+    };
+
+    if (frm.is_dirty()) {
+        frm.save('Save', function () { do_preview(0); });
+    } else {
+        do_preview(0);
+    }
 }
 
 // ============================================================
