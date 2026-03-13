@@ -319,14 +319,9 @@ def _bulk_insert_logs(envio_name, rendered_list):
             "Pendente",
             now_str, now_str, owner, owner, 0
         ))
-    frappe.db.sql(
-        """INSERT INTO `tabEnvio em Massa Log`
-           (name, envio, numero, nome, origem, mensagem_renderizada, status,
-            creation, modified, owner, modified_by, docstatus)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-        values=rows,
-        as_list=True
-    )
+    fields = ["name", "envio", "numero", "nome", "origem", "mensagem_renderizada",
+              "status", "creation", "modified", "owner", "modified_by", "docstatus"]
+    frappe.db.bulk_insert("Envio em Massa Log", fields=fields, values=rows)
     frappe.db.commit()
 
 
