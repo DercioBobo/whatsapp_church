@@ -854,15 +854,10 @@ $(document).on('form-refresh', function(e, frm) {
     }
 });
 
-// ============================================================
-// Table Helper
-// ============================================================
+// NOTE: Table helper (frappe.whatsapp.open_table_helper) is defined in
+// conversa_whatsapp.js and aviso_whatsapp.js to avoid build pipeline dependency.
 
-/**
- * Open a dialog to format tabular data as a WhatsApp monospace table.
- * Supports TSV (clipboard from spreadsheets), CSV, and pipe-separated input.
- */
-frappe.whatsapp.open_table_helper = function() {
+frappe.whatsapp.open_table_helper = frappe.whatsapp.open_table_helper || function() {
     let d = new frappe.ui.Dialog({
         title: __('Auxiliar de Tabela WhatsApp'),
         size: 'large',

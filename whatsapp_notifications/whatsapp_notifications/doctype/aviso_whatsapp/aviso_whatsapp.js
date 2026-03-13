@@ -1730,3 +1730,136 @@ frappe.listview_settings['Aviso WhatsApp'] = {
     },
     add_fields: ['status', 'titulo']
 };
+
+// ─────────────────────────────────────────────────────────────────────
+// Table Helper — guard: may already be defined by conversa_whatsapp.js
+// ─────────────────────────────────────────────────────────────────────
+frappe.whatsapp = frappe.whatsapp || {};
+
+if (!frappe.whatsapp.open_table_helper) {
+    frappe.whatsapp.open_table_helper = function() {
+        let d = new frappe.ui.Dialog({
+            title: __('Auxiliar de Tabela WhatsApp'),
+            size: 'large',
+            fields: [{
+                fieldtype: 'HTML',
+                fieldname: 'table_helper_html',
+                options: `
+<div style="padding: 4px 0;">
+    <div style="margin-bottom: 12px;">
+        <label style="font-size: 13px; font-weight: 500; color: #333; display: block; margin-bottom: 6px;">
+            Cole os seus dados <span style="font-weight:400; color:#888;">(TSV, CSV ou separado por |)</span>
+        </label>
+        <textarea class="wa-th-input form-control" rows="6"
+            placeholder="Nome&#9;Idade&#9;Cidade&#10;Jo&#227;o&#9;25&#9;Lisboa&#10;Maria&#9;30&#9;Porto"
+            style="font-family: monospace; font-size: 13px; resize: vertical; width: 100%;"></textarea>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 12px;">
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; margin: 0;">
+            <input type="checkbox" class="wa-th-header" style="cursor: pointer; width: 14px; height: 14px;">
+            Primeira linha &#233; cabe&#231;alho
+        </label>
+        <button class="btn btn-sm btn-primary wa-th-generate">Gerar Tabela</button>
+    </div>
+    <div style="margin-bottom: 8px;">
+        <label style="font-size: 13px; font-weight: 500; color: #333; display: block; margin-bottom: 6px;">
+            Resultado:
+        </label>
+        <textarea class="wa-th-output form-control" rows="8" readonly
+            style="font-family: monospace; font-size: 12px; background: #f8f9fa; resize: vertical; width: 100%;"></textarea>
+    </div>
+    <div style="text-align: right;">
+        <button class="btn btn-sm btn-default wa-th-copy" style="min-width: 150px;">
+            Copiar para &#193;rea de Transfer&#234;ncia
+        </button>
+    </div>
+</div>`
+            }]
+        });
+
+        d.show();
+        let $w = d.$wrapper;
+
+        $w.find('.wa-th-generate').on('click', function() {
+            let raw = $w.find('.wa-th-input').val();
+            let has_header = $w.find('.wa-th-header').is(':checked');
+            if (!raw.trim()) {
+                frappe.show_alert({ message: __('Cole os dados primeiro.'), indicator: 'orange' }, 3);
+                return;
+            }
+            $w.find('.wa-th-output').val(_wa_build_table(raw, has_header));
+        });
+
+        $w.find('.wa-th-copy').on('click', function() {
+            let text = $w.find('.wa-th-output').val();
+            if (!text) {
+                frappe.show_alert({ message: __('Gere a tabela primeiro.'), indicator: 'orange' }, 3);
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    frappe.show_alert({ message: __('Copiado!'), indicator: 'green' }, 2);
+                });
+            } else {
+                $w.find('.wa-th-output')[0].select();
+                document.execCommand('copy');
+                frappe.show_alert({ message: __('Copiado!'), indicator: 'green' }, 2);
+            }
+        });
+    };
+
+    function _wa_build_table(raw, has_header) {
+        let lines = raw.split('\n');
+        while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+        if (!lines.length) return '';
+
+        let sep = '\t';
+        let sample = lines[0];
+        if (sample.indexOf('\t') === -1) {
+            if (sample.indexOf(',') !== -1) sep = ',';
+            else if (sample.indexOf('|') !== -1) sep = '|';
+            else sep = null;
+        }
+
+        let rows = lines.map(line => {
+            if (!sep) return [line.trim()];
+            if (sep === ',') return _wa_parse_csv_line(line);
+            return line.split(sep).map(c => c.trim());
+        });
+
+        let max_cols = Math.max(...rows.map(r => r.length));
+        rows = rows.map(r => { while (r.length < max_cols) r.push(''); return r; });
+
+        let col_widths = Array(max_cols).fill(0);
+        rows.forEach(row => row.forEach((cell, i) => {
+            col_widths[i] = Math.max(col_widths[i], cell.length);
+        }));
+
+        let out = [];
+        rows.forEach((row, idx) => {
+            out.push(row.map((cell, i) => cell.padEnd(col_widths[i])).join(' | '));
+            if (has_header && idx === 0) {
+                out.push(col_widths.map(w => '-'.repeat(w)).join('-+-'));
+            }
+        });
+
+        return '```\n' + out.join('\n') + '\n```';
+    }
+
+    function _wa_parse_csv_line(line) {
+        let result = [], current = '', in_quotes = false;
+        for (let i = 0; i < line.length; i++) {
+            let ch = line[i];
+            if (ch === '"') {
+                if (in_quotes && line[i + 1] === '"') { current += '"'; i++; }
+                else { in_quotes = !in_quotes; }
+            } else if (ch === ',' && !in_quotes) {
+                result.push(current.trim()); current = '';
+            } else {
+                current += ch;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+}
