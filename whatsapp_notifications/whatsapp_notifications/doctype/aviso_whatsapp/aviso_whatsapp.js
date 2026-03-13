@@ -1909,7 +1909,7 @@ function _wa_init_filter_builder($container, initial_filters, on_change) {
     let _fields = [];
 
     function _op_html(sel) {
-        return '<select class="wa-fb-op form-control form-control-sm" style="min-width:105px;">' +
+        return '<select class="wa-fb-op form-control" style="flex:0 0 130px;width:130px;">' +
             OPS.map(op => `<option value="${op}"${op === sel ? ' selected' : ''}>${op}</option>`).join('') +
             '</select>';
     }
@@ -1918,18 +1918,18 @@ function _wa_init_filter_builder($container, initial_filters, on_change) {
         let uid = 'wafb' + Date.now() + Math.floor(Math.random() * 9999);
         let no_val = ['is set', 'is not set'].includes(operador);
         let $row = $(`
-        <div class="wa-fb-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
-            <input type="text" class="wa-fb-campo form-control form-control-sm"
-                style="flex:2;min-width:0;" list="${uid}" placeholder="campo"
+        <div class="wa-fb-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <input type="text" class="wa-fb-campo form-control"
+                style="flex:3;min-width:0;" list="${uid}" placeholder="Campo..."
                 value="${frappe.utils.escape_html(campo || '')}">
             <datalist id="${uid}"></datalist>
             ${_op_html(operador || '=')}
-            <input type="text" class="wa-fb-val form-control form-control-sm"
-                style="flex:2;min-width:0;" placeholder="valor"
+            <input type="text" class="wa-fb-val form-control"
+                style="flex:3;min-width:0;" placeholder="Valor..."
                 value="${frappe.utils.escape_html(valor || '')}"
                 ${no_val ? 'disabled' : ''}>
-            <button class="wa-fb-rem btn btn-xs" style="flex-shrink:0;color:#c62828;
-                background:none;border:1px solid #e0e0e0;padding:2px 7px;">×</button>
+            <button class="wa-fb-rem btn btn-default" style="flex-shrink:0;color:#c62828;
+                border-color:#ddd;padding:5px 10px;font-size:15px;line-height:1;">×</button>
         </div>`);
 
         // Populate datalist with available fields
