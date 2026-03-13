@@ -32,7 +32,9 @@
         "resultado_html",
         "historico",
         "total_enviados",
-        "total_falhados"
+        "total_falhados",
+        "section_falhados",
+        "falhados_html"
     ],
     "fields": [
         {
@@ -206,6 +208,17 @@
             "read_only": 1,
             "default": "0",
             "hidden": 1
+        },
+        {
+            "fieldname": "section_falhados",
+            "fieldtype": "Section Break",
+            "hide_border": 1,
+            "depends_on": "eval:doc.total_falhados>0"
+        },
+        {
+            "fieldname": "falhados_html",
+            "fieldtype": "HTML",
+            "label": "Contactos Falhados"
         }
     ],
     "index_web_pages_for_search": 1,

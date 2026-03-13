@@ -188,6 +188,34 @@ def preview_mensagens(aviso_name, limit=5, offset=0):
 
 
 @frappe.whitelist()
+def get_falhados_aviso(aviso_name):
+    """Return deduplicated failed recipients across all Envio em Massa logs for this aviso."""
+    envios = frappe.get_all(
+        "Envio em Massa WhatsApp",
+        filters={"aviso": aviso_name},
+        pluck="name",
+        limit_page_length=0
+    )
+    if not envios:
+        return []
+    falhados = frappe.get_all(
+        "Envio em Massa Log",
+        filters={"envio": ["in", envios], "status": "Falhado"},
+        fields=["numero", "nome", "erro"],
+        order_by="nome asc",
+        limit_page_length=0
+    )
+    # Deduplicate by numero — keep first occurrence
+    seen = set()
+    result = []
+    for f in falhados:
+        if f.numero and f.numero not in seen:
+            seen.add(f.numero)
+            result.append(f)
+    return result
+
+
+@frappe.whitelist()
 def preview_fonte_destinatarios(fonte_json):
     """Return resolved phone numbers for a single fonte definition (preview before saving)."""
     fonte = frappe._dict(json.loads(fonte_json))

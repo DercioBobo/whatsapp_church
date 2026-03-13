@@ -33,6 +33,10 @@ frappe.ui.form.on('Aviso WhatsApp', {
             render_historico_area(frm);
         }
 
+        if ((frm.doc.total_falhados || 0) > 0) {
+            render_falhados_area(frm);
+        }
+
         let status_colors = {
             'Rascunho': 'orange', 'Agendado': 'blue', 'Enviando': 'blue',
             'Enviado': 'green', 'Recorrente': 'purple', 'Pausado': 'yellow',
@@ -843,6 +847,89 @@ function render_historico_area(frm) {
 
     html += '</div>';
     frm.fields_dict.resultado_html.$wrapper.html(html);
+}
+
+// ============================================================
+// Falhados area
+// ============================================================
+function render_falhados_area(frm) {
+    if (!frm.fields_dict.falhados_html) return;
+    let $w = frm.fields_dict.falhados_html.$wrapper;
+    $w.html(`<div style="color:${WA_COLORS.grey_text};font-size:12px;padding:8px 0;">A carregar contactos falhados...</div>`);
+
+    frappe.call({
+        method: 'whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp.get_falhados_aviso',
+        args: { aviso_name: frm.doc.name },
+        callback: function (r) {
+            let falhados = r.message || [];
+            if (!falhados.length) {
+                $w.html('');
+                return;
+            }
+
+            // Build rows HTML
+            let rows_html = falhados.map(function (f) {
+                let label = f.nome
+                    ? `<span style="font-weight:600;color:#333;">${frappe.utils.escape_html(f.nome)}</span>
+                       <span style="color:${WA_COLORS.grey_text};margin:0 4px;">—</span>`
+                    : '';
+                let erro_html = f.erro
+                    ? `<span style="font-size:11px;color:#b71c1c;margin-left:8px;"
+                        title="${frappe.utils.escape_html(f.erro)}">⚠ ${frappe.utils.escape_html(f.erro.substring(0, 60))}${f.erro.length > 60 ? '…' : ''}</span>`
+                    : '';
+                return `<div class="wa-falhado-row" style="display:flex;align-items:center;gap:4px;
+                    padding:6px 10px;border-bottom:1px solid #fce4e4;flex-wrap:wrap;">
+                    ${label}
+                    <code style="font-size:12px;color:${WA_COLORS.teal};background:#f5f5f5;
+                        padding:1px 6px;border-radius:4px;">${frappe.utils.escape_html(f.numero)}</code>
+                    ${erro_html}
+                </div>`;
+            }).join('');
+
+            let all_numbers = falhados.map(f => f.numero).join('\n');
+            let all_with_names = falhados.map(f => f.nome ? `${f.nome} - ${f.numero}` : f.numero).join('\n');
+
+            let html = `
+            <div style="border:1px solid #ffcdd2;border-radius:10px;overflow:hidden;margin-top:4px;">
+                <div style="background:#ffebee;padding:12px 16px;display:flex;align-items:center;
+                    justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:18px;">❌</span>
+                        <span style="font-weight:700;font-size:14px;color:#b71c1c;">
+                            ${falhados.length} contacto${falhados.length !== 1 ? 's' : ''} falhado${falhados.length !== 1 ? 's' : ''}
+                        </span>
+                        <span style="font-size:11px;color:#c62828;">
+                            (sem WhatsApp ou número inválido)
+                        </span>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-xs btn-default wa-copy-numbers"
+                            style="border-color:#e57373;color:#c62828;">
+                            📋 Copiar Números
+                        </button>
+                        <button class="btn btn-xs btn-default wa-copy-names-numbers"
+                            style="border-color:#e57373;color:#c62828;">
+                            📋 Copiar com Nomes
+                        </button>
+                    </div>
+                </div>
+                <div style="max-height:280px;overflow-y:auto;background:white;">
+                    ${rows_html}
+                </div>
+            </div>`;
+
+            $w.html(html);
+
+            $w.find('.wa-copy-numbers').on('click', function () {
+                frappe.utils.copy_to_clipboard(all_numbers);
+                frappe.show_alert({ message: __(`${falhados.length} número(s) copiados`), indicator: 'green' });
+            });
+            $w.find('.wa-copy-names-numbers').on('click', function () {
+                frappe.utils.copy_to_clipboard(all_with_names);
+                frappe.show_alert({ message: __(`${falhados.length} contacto(s) copiados com nomes`), indicator: 'green' });
+            });
+        }
+    });
 }
 
 // ============================================================
