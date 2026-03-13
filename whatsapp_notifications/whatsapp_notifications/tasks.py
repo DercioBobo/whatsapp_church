@@ -433,6 +433,30 @@ def _process_date_rule(rule, today, settings, process_rule_fn):
             )
 
 
+def detect_stalled_envios():
+    """
+    Called every 5 minutes. Marks 'Em Execução' envios with no heartbeat
+    for >15 minutes as 'Interrompido' (likely killed by server restart).
+    """
+    try:
+        from frappe.utils import add_to_date, now_datetime
+        cutoff = add_to_date(now_datetime(), minutes=-15)
+        stalled = frappe.get_all(
+            "Envio em Massa WhatsApp",
+            filters=[
+                ["status", "=", "Em Execução"],
+                ["ultimo_heartbeat", "<", cutoff]
+            ],
+            pluck="name"
+        )
+        for name in stalled:
+            frappe.db.set_value("Envio em Massa WhatsApp", name, "status", "Interrompido")
+        if stalled:
+            frappe.db.commit()
+    except Exception:
+        pass
+
+
 def process_birthday_rules():
     """
     Check all enabled birthday rules and enqueue those whose send_time window is now.

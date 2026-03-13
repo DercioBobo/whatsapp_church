@@ -12,11 +12,13 @@ def get_schedule_data():
     - Birthday rules with next run, today's matches, last run info
     - Days Before/After notification rules with target date, matches, sent count
     - Recent activity from scheduled rules
+    - Recent bulk sends (Envio em Massa WhatsApp)
     """
     return {
         "birthday_rules": _get_birthday_rules(),
         "date_event_rules": _get_date_event_rules(),
         "recent_activity": _get_recent_activity(),
+        "bulk_sends": get_bulk_sends(limit=15),
         "now": str(now_datetime()),
         "today": today(),
     }
@@ -195,6 +197,38 @@ def _active_hours_label(rule):
 # ---------------------------------------------------------------------------
 # Recent Activity
 # ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_bulk_sends(limit=20):
+    """Return recent Envio em Massa WhatsApp docs for the monitor page."""
+    try:
+        envios = frappe.get_all(
+            "Envio em Massa WhatsApp",
+            fields=[
+                "name", "aviso", "titulo", "status",
+                "total", "enviados", "falhados", "pendentes",
+                "disparado_por", "iniciado_em", "concluido_em", "ultimo_heartbeat"
+            ],
+            order_by="creation desc",
+            limit_page_length=int(limit)
+        )
+        from frappe.utils import now_datetime
+        now = str(now_datetime())
+        for e in envios:
+            done = (e.get("enviados") or 0) + (e.get("falhados") or 0)
+            total = e.get("total") or 1
+            e["progresso"] = round(done / total * 100)
+            # Detect stalled: Em Execução but heartbeat > 15 min ago
+            if e.get("status") == "Em Execução" and e.get("ultimo_heartbeat"):
+                from frappe.utils import get_datetime, time_diff_in_seconds
+                diff = time_diff_in_seconds(now, str(e["ultimo_heartbeat"]))
+                if diff > 900:  # 15 minutes
+                    e["possivelmente_interrompido"] = True
+        return envios
+    except Exception:
+        frappe.log_error(title="get_bulk_sends error", message=frappe.get_traceback())
+        return []
+
 
 def _get_recent_activity():
     # Collect names of all date-event notification rules

@@ -253,6 +253,195 @@ def _executar_aviso_agendado(aviso_name, disparado_por="Agendado"):
         )
 
 
+def _bulk_insert_logs(envio_name, rendered_list):
+    """Bulk-insert Envio em Massa Log rows using direct SQL for performance."""
+    if not rendered_list:
+        return
+    now_str = str(frappe.utils.now_datetime())
+    owner = frappe.session.user or "Administrator"
+    rows = []
+    for dest in rendered_list:
+        rows.append((
+            frappe.generate_hash(length=10),
+            envio_name,
+            (dest.get("numero") or ""),
+            (dest.get("nome") or "")[:140],
+            (dest.get("origem") or "")[:140],
+            (dest.get("mensagem_renderizada") or ""),
+            "Pendente",
+            now_str, now_str, owner, owner, 0
+        ))
+    frappe.db.sql(
+        """INSERT INTO `tabEnvio em Massa Log`
+           (name, envio, numero, nome, origem, mensagem_renderizada, status,
+            creation, modified, owner, modified_by, docstatus)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        values=rows,
+        as_list=True
+    )
+    frappe.db.commit()
+
+
+def _enviar_em_massa(envio_name, aviso_name, disparado_por="Manual"):
+    """Background worker: send pending log rows, update progress, support resume."""
+    from whatsapp_notifications.whatsapp_notifications.api import send_whatsapp, send_whatsapp_media
+    from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
+
+    try:
+        envio = frappe.get_doc("Envio em Massa WhatsApp", envio_name)
+        aviso = frappe.get_doc("Aviso WhatsApp", aviso_name)
+    except frappe.DoesNotExistError:
+        frappe.log_error(title="Envio em Massa - Doc não encontrado", message=envio_name)
+        return
+
+    # Mark as running
+    frappe.db.set_value("Envio em Massa WhatsApp", envio_name, {
+        "status": "Em Execução",
+        "ultimo_heartbeat": frappe.utils.now_datetime()
+    })
+    frappe.db.commit()
+
+    # Load all pending recipients
+    pending = frappe.get_all(
+        "Envio em Massa Log",
+        filters={"envio": envio_name, "status": "Pendente"},
+        fields=["name", "numero", "nome", "origem", "mensagem_renderizada"],
+        order_by="creation asc",
+        limit_page_length=0
+    )
+
+    if not pending:
+        frappe.db.set_value("Envio em Massa WhatsApp", envio_name, {
+            "status": "Concluído",
+            "concluido_em": frappe.utils.now_datetime()
+        })
+        frappe.db.commit()
+        return
+
+    # Rate limiting settings
+    settings = get_settings()
+    rate_limit_on = settings.get("enable_rate_limiting")
+    msgs_per_min = max(1, settings.get("messages_per_minute") or 20)
+    delay_base = (60.0 / msgs_per_min) if rate_limit_on else 0
+
+    has_attachment = bool(envio.anexo)
+    enviados = 0
+    falhados = 0
+    heartbeat_counter = 0
+
+    for i, log in enumerate(pending):
+        if i > 0 and delay_base:
+            time.sleep(delay_base * random.uniform(0.75, 1.25))
+
+        numero = (log.numero or "").strip()
+        if not numero:
+            frappe.db.set_value("Envio em Massa Log", log.name, {
+                "status": "Falhado",
+                "erro": "Número vazio"
+            })
+            falhados += 1
+            frappe.db.sql(
+                "UPDATE `tabEnvio em Massa WhatsApp` SET falhados=falhados+1, pendentes=pendentes-1 WHERE name=%s",
+                envio_name
+            )
+            frappe.db.commit()
+            continue
+
+        try:
+            mensagem = log.mensagem_renderizada or ""
+            if has_attachment:
+                result = send_whatsapp_media(
+                    phone=numero,
+                    doctype="Aviso WhatsApp",
+                    docname=aviso_name,
+                    file_url=envio.anexo,
+                    caption=mensagem,
+                    queue=False
+                )
+            else:
+                result = send_whatsapp(
+                    phone=numero,
+                    message=mensagem,
+                    doctype="Aviso WhatsApp",
+                    docname=aviso_name,
+                    queue=False
+                )
+
+            if result and result.get("success"):
+                frappe.db.set_value("Envio em Massa Log", log.name, {
+                    "status": "Enviado",
+                    "enviado_em": frappe.utils.now_datetime()
+                })
+                enviados += 1
+                frappe.db.sql(
+                    "UPDATE `tabEnvio em Massa WhatsApp` SET enviados=enviados+1, pendentes=pendentes-1 WHERE name=%s",
+                    envio_name
+                )
+            else:
+                err = (result or {}).get("error") or "Send returned failure"
+                frappe.db.set_value("Envio em Massa Log", log.name, {
+                    "status": "Falhado",
+                    "erro": str(err)[:500]
+                })
+                falhados += 1
+                frappe.db.sql(
+                    "UPDATE `tabEnvio em Massa WhatsApp` SET falhados=falhados+1, pendentes=pendentes-1 WHERE name=%s",
+                    envio_name
+                )
+        except Exception as e:
+            frappe.db.set_value("Envio em Massa Log", log.name, {
+                "status": "Falhado",
+                "erro": str(e)[:500]
+            })
+            falhados += 1
+            frappe.db.sql(
+                "UPDATE `tabEnvio em Massa WhatsApp` SET falhados=falhados+1, pendentes=pendentes-1 WHERE name=%s",
+                envio_name
+            )
+            frappe.log_error(
+                message="{} -> {}".format(numero, str(e)),
+                title="Envio em Massa - Erro Envio"
+            )
+
+        # Heartbeat every 10 messages
+        heartbeat_counter += 1
+        if heartbeat_counter % 10 == 0:
+            frappe.db.set_value("Envio em Massa WhatsApp", envio_name, "ultimo_heartbeat", frappe.utils.now_datetime())
+
+        frappe.db.commit()
+
+    # Final state
+    final_status = "Concluído" if falhados == 0 else ("Falhado" if enviados == 0 else "Concluído")
+    frappe.db.set_value("Envio em Massa WhatsApp", envio_name, {
+        "status": final_status,
+        "concluido_em": frappe.utils.now_datetime()
+    })
+    frappe.db.commit()
+
+    # Register history on the aviso
+    try:
+        aviso.reload()
+        total = enviados + falhados
+        aviso.registar_historico(
+            enviados=enviados,
+            falhados=falhados,
+            total=total,
+            disparado_por=disparado_por
+        )
+
+        proximo = aviso.calcular_proximo_envio(after_send=True)
+        if proximo:
+            novo_status = "Recorrente" if aviso.modo_recorrencia in ("Intervalo", "Datas") else "Agendado"
+            aviso.db_set("proximo_envio", proximo)
+            aviso.db_set("status", novo_status)
+        else:
+            new_status = "Enviado" if aviso.tipo_envio == "Agora" else "Concluído"
+            aviso.db_set("status", new_status)
+        frappe.db.commit()
+    except Exception:
+        frappe.log_error(title="Envio em Massa - Erro registar histórico", message=frappe.get_traceback())
+
+
 class AvisoWhatsApp(Document):
 
     def validate(self):
@@ -274,24 +463,58 @@ class AvisoWhatsApp(Document):
 
     @frappe.whitelist()
     def enviar_agora(self, disparado_por="Manual"):
-        """Validate, mark as Enviando, and queue a background send job."""
+        """Validate, resolve recipients, create monitoring doc, and queue background send."""
         if self.status == "Enviando":
             frappe.throw(_("Envio já em curso."))
 
         if not self.mensagem and not self.anexo:
             frappe.throw(_("Escreva a mensagem ou anexe um ficheiro."))
 
+        # Resolve and pre-render all recipients before enqueuing
+        destinatarios = self.resolver_destinatarios()
+        if not destinatarios:
+            frappe.throw(_("Nenhum destinatário encontrado nas fontes configuradas."))
+
+        # Pre-render messages (so resume doesn't need the full doc context)
+        rendered = []
+        for dest in destinatarios:
+            rendered.append({
+                "numero": dest.get("contacto", ""),
+                "nome": dest.get("nome", "") or "",
+                "origem": dest.get("origem", "") or "",
+                "mensagem_renderizada": self._render_mensagem(dest),
+            })
+
+        # Create the Envio em Massa monitor doc
+        envio = frappe.new_doc("Envio em Massa WhatsApp")
+        envio.aviso = self.name
+        envio.titulo = self.titulo or self.name
+        envio.status = "Preparando"
+        envio.total = len(rendered)
+        envio.enviados = 0
+        envio.falhados = 0
+        envio.pendentes = len(rendered)
+        envio.disparado_por = disparado_por
+        envio.iniciado_em = frappe.utils.now_datetime()
+        envio.anexo = self.anexo or ""
+        envio.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        # Bulk-insert log rows via direct SQL for performance
+        _bulk_insert_logs(envio.name, rendered)
+
         self.db_set("status", "Enviando")
         frappe.db.commit()
 
         frappe.enqueue(
-            "whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp._executar_aviso_agendado",
+            "whatsapp_notifications.whatsapp_notifications.doctype.aviso_whatsapp.aviso_whatsapp._enviar_em_massa",
+            envio_name=envio.name,
             aviso_name=self.name,
             disparado_por=disparado_por,
             queue="long",
-            timeout=14400  # 4 hours — supports 900+ contacts with rate limiting
+            timeout=14400
         )
-        return {"success": True, "queued": True}
+        return {"success": True, "queued": True, "envio": envio.name}
 
     def _enviar(self, disparado_por="Manual"):
         """Background worker: send to all recipients with optional rate limiting."""

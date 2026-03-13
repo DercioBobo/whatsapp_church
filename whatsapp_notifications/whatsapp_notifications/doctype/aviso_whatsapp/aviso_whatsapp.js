@@ -1942,7 +1942,8 @@ function _wa_init_filter_builder($container, initial_filters, on_change) {
             if (on_change) on_change();
         });
         $row.find('.wa-fb-rem').on('click', function(e) { e.preventDefault(); $row.remove(); if (on_change) on_change(); });
-        $row.find('.wa-fb-campo, .wa-fb-val').on('input change blur', function() { if (on_change) on_change(); });
+        $row.find('.wa-fb-campo').on('change blur', function() { if (on_change) on_change(); });
+        $row.find('.wa-fb-val').on('input change blur', function() { if (on_change) on_change(); });
 
         $container.find('.wa-fb-rows').append($row);
     }

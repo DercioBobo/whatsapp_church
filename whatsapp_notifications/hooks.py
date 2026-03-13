@@ -124,7 +124,8 @@ scheduler_events = {
         ],
         # Retry failed messages every 5 minutes
         "*/5 * * * *": [
-            "whatsapp_notifications.whatsapp_notifications.tasks.retry_failed_messages"
+            "whatsapp_notifications.whatsapp_notifications.tasks.retry_failed_messages",
+            "whatsapp_notifications.whatsapp_notifications.tasks.detect_stalled_envios"
         ],
         # Check auto reports every 15 minutes
         "*/15 * * * *": [

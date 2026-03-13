@@ -46,6 +46,8 @@ function render_page(page, data) {
                 ${__("Last refreshed")}: <b>${now}</b>
                 &nbsp;|&nbsp; ${__("Today")}: <b>${frappe.datetime.str_to_user(data.today)}</b>
             </div>
+            ${render_bulk_sends_section(data.bulk_sends || [])}
+            <div style="margin-top:28px"></div>
             ${render_birthday_section(data.birthday_rules)}
             <div style="margin-top:28px"></div>
             ${render_date_event_section(data.date_event_rules)}
@@ -60,6 +62,25 @@ function render_page(page, data) {
         var rule = $(this).data("rule");
         run_birthday_now(rule, page);
     });
+
+    // Wire retomar buttons
+    $(page.wrapper).find(".btn-retomar-envio").on("click", function () {
+        var envio_name = $(this).data("envio");
+        retomar_envio(envio_name, page);
+    });
+
+    // Auto-refresh if any envio is running
+    var has_running = (data.bulk_sends || []).some(e => e.status === 'Em Execução');
+    if (has_running) {
+        if (!page._bulk_refresh_timer) {
+            page._bulk_refresh_timer = setInterval(() => load_data(page), 8000);
+        }
+    } else {
+        if (page._bulk_refresh_timer) {
+            clearInterval(page._bulk_refresh_timer);
+            page._bulk_refresh_timer = null;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +349,114 @@ function render_recent_activity(logs) {
             </table>
         </div>
     </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk Sends section
+// ---------------------------------------------------------------------------
+
+function render_bulk_sends_section(envios) {
+    var rows = (envios || []).map(e => render_bulk_send_row(e)).join("");
+
+    return `
+    <div class="card" style="${card_style()}">
+        <div style="${section_header_style()}">
+            <span style="font-size:16px;font-weight:600;">
+                📤 ${__("Envios em Massa")}
+            </span>
+            <span class="badge" style="background:#f0f4f8;color:#6c757d;padding:4px 10px;border-radius:20px;font-size:12px;">
+                ${envios.length} ${__("envios")}
+            </span>
+        </div>
+        ${envios.length === 0
+            ? `<p class="text-muted" style="padding:16px;">${__("Nenhum envio em massa encontrado.")}</p>`
+            : `<div style="overflow-x:auto;">
+                <table class="table table-sm" style="${table_style()}">
+                    <thead>
+                        <tr style="background:#f8f9fa;">
+                            <th>${__("Envio")}</th>
+                            <th>${__("Aviso")}</th>
+                            <th>${__("Status")}</th>
+                            <th>${__("Progresso")}</th>
+                            <th>${__("Total")}</th>
+                            <th>${__("Enviados")}</th>
+                            <th>${__("Falhados")}</th>
+                            <th>${__("Disparado Por")}</th>
+                            <th>${__("Iniciado Em")}</th>
+                            <th>${__("Concluído Em")}</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+               </div>`
+        }
+    </div>`;
+}
+
+function render_bulk_send_row(e) {
+    var status_colors = {
+        "Preparando": "blue", "Em Execução": "blue",
+        "Concluído": "green", "Interrompido": "orange", "Falhado": "red"
+    };
+    var status_badge = `<span style="${badge_style(status_colors[e.status] || 'gray')}">${e.status}</span>`;
+    if (e.possivelmente_interrompido) {
+        status_badge += ` <span style="${badge_style('orange')}" title="${__('Sem heartbeat há mais de 15 min')}">⚠</span>`;
+    }
+
+    var pct = e.progresso || 0;
+    var bar_color = e.status === 'Concluído' ? '#4caf50' : (e.status === 'Em Execução' ? '#2196f3' : (e.falhados > 0 ? '#ff9800' : '#9e9e9e'));
+    var progress_html = `
+        <div style="min-width:120px;">
+            <div style="font-size:11px;margin-bottom:2px;">${pct}% (${(e.enviados||0)+(e.falhados||0)}/${e.total||0})</div>
+            <div style="height:6px;background:#e0e0e0;border-radius:3px;">
+                <div style="height:100%;width:${pct}%;background:${bar_color};border-radius:3px;"></div>
+            </div>
+        </div>`;
+
+    var aviso_link = e.aviso
+        ? `<a href="/app/aviso-whatsapp/${e.aviso}" style="font-size:12px;">${e.titulo || e.aviso}</a>`
+        : '—';
+
+    var iniciado = e.iniciado_em ? `<span style="font-size:11px;">${frappe.datetime.str_to_user(e.iniciado_em)}</span>` : '—';
+    var concluido = e.concluido_em ? `<span style="font-size:11px;">${frappe.datetime.str_to_user(e.concluido_em)}</span>` : '—';
+
+    var can_resume = ['Em Execução', 'Interrompido', 'Falhado'].includes(e.status) && (e.pendentes || 0) > 0;
+    var action_btn = can_resume
+        ? `<button class="btn btn-xs btn-warning btn-retomar-envio" data-envio="${e.name}">↺ ${__("Retomar")}</button>`
+        : `<a href="/app/envio-em-massa-whatsapp/${e.name}" class="btn btn-xs btn-default">${__("Ver")}</a>`;
+
+    return `<tr>
+        <td><a href="/app/envio-em-massa-whatsapp/${e.name}" style="font-size:12px;">${e.name}</a></td>
+        <td>${aviso_link}</td>
+        <td>${status_badge}</td>
+        <td>${progress_html}</td>
+        <td style="text-align:center;">${e.total || 0}</td>
+        <td style="text-align:center;color:#2e7d32;"><b>${e.enviados || 0}</b></td>
+        <td style="text-align:center;color:#c62828;">${e.falhados || 0}</td>
+        <td style="font-size:11px;">${e.disparado_por || '—'}</td>
+        <td>${iniciado}</td>
+        <td>${concluido}</td>
+        <td>${action_btn}</td>
+    </tr>`;
+}
+
+function retomar_envio(envio_name, page) {
+    frappe.confirm(
+        __("Retomar o envio <b>{0}</b>?", [envio_name]),
+        function () {
+            frappe.call({
+                method: "whatsapp_notifications.whatsapp_notifications.doctype.envio_em_massa_whatsapp.envio_em_massa_whatsapp.retomar_envio",
+                args: { envio_name: envio_name },
+                callback: function(r) {
+                    if (r.message && r.message.queued) {
+                        frappe.show_alert({ message: __("Envio retomado! {0} pendentes.", [r.message.pendentes]), indicator: "green" });
+                        setTimeout(() => load_data(page), 2000);
+                    }
+                }
+            });
+        }
+    );
 }
 
 // ---------------------------------------------------------------------------
