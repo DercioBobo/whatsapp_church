@@ -361,11 +361,10 @@ def _enviar_em_massa(envio_name, aviso_name, disparado_por="Manual"):
         frappe.db.commit()
         return
 
-    # Rate limiting settings
     settings = get_settings()
-    rate_limit_on = settings.get("enable_rate_limiting")
-    msgs_per_min = max(1, settings.get("messages_per_minute") or 20)
-    delay_base = (60.0 / msgs_per_min) if rate_limit_on else 0
+    extra_delay = settings.get("delay_envio_massa") or 0  # seconds, 0 = off
+    limite = settings.get("limite_delay_massa") or 20
+    apply_delay = extra_delay > 0 and len(pending) >= limite
 
     has_attachment = bool(envio.anexo)
     enviados = 0
@@ -373,8 +372,8 @@ def _enviar_em_massa(envio_name, aviso_name, disparado_por="Manual"):
     heartbeat_counter = 0
 
     for i, log in enumerate(pending):
-        if i > 0 and delay_base:
-            time.sleep(delay_base * random.uniform(0.75, 1.25))
+        if i > 0 and apply_delay:
+            time.sleep(extra_delay * random.uniform(0.8, 1.2))
 
         numero = (log.numero or "").strip()
         if not numero:
@@ -450,6 +449,18 @@ def _enviar_em_massa(envio_name, aviso_name, disparado_por="Manual"):
         heartbeat_counter += 1
         if heartbeat_counter % 10 == 0:
             frappe.db.set_value("Envio em Massa WhatsApp", envio_name, "ultimo_heartbeat", frappe.utils.now_datetime())
+            # Check if stop/cancel was requested
+            current = frappe.db.get_value("Envio em Massa WhatsApp", envio_name,
+                ["parar_solicitado", "status"], as_dict=True)
+            if current and current.parar_solicitado:
+                # Cancelled: aviso already freed; Parando: mark Interrompido
+                if current.status != "Cancelado":
+                    frappe.db.set_value("Envio em Massa WhatsApp", envio_name, {
+                        "status": "Interrompido",
+                        "parar_solicitado": 0
+                    })
+                frappe.db.commit()
+                return
 
         frappe.db.commit()
 

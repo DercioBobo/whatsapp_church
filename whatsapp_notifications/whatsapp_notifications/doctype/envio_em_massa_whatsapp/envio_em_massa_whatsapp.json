@@ -20,7 +20,10 @@
         "concluido_em",
         "ultimo_heartbeat",
         "anexo",
+        "parar_solicitado",
         "section_actions",
+        "btn_parar",
+        "btn_cancelar",
         "btn_retomar",
         "btn_ver_logs"
     ],
@@ -45,7 +48,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Status",
-            "options": "Preparando\nEm Execu\u00e7\u00e3o\nConclu\u00eddo\nInterrompido\nFalhado",
+            "options": "Preparando\nEm Execu\u00e7\u00e3o\nParando\nConclu\u00eddo\nInterrompido\nCancelado\nFalhado",
             "default": "Preparando",
             "read_only": 1
         },
@@ -116,14 +119,33 @@
             "read_only": 1
         },
         {
+            "fieldname": "parar_solicitado",
+            "fieldtype": "Check",
+            "hidden": 1,
+            "label": "Parar Solicitado"
+        },
+        {
             "fieldname": "section_actions",
             "fieldtype": "Section Break",
             "label": "A\u00e7\u00f5es"
         },
         {
+            "fieldname": "btn_parar",
+            "fieldtype": "Button",
+            "label": "Parar Envio",
+            "depends_on": "eval:doc.status=='Em Execu\u00e7\u00e3o'"
+        },
+        {
+            "fieldname": "btn_cancelar",
+            "fieldtype": "Button",
+            "label": "Cancelar Envio",
+            "depends_on": "eval:['Em Execu\u00e7\u00e3o','Parando','Interrompido'].includes(doc.status)"
+        },
+        {
             "fieldname": "btn_retomar",
             "fieldtype": "Button",
-            "label": "Retomar Envio"
+            "label": "Retomar Envio",
+            "depends_on": "eval:['Interrompido','Falhado'].includes(doc.status)"
         },
         {
             "fieldname": "btn_ver_logs",

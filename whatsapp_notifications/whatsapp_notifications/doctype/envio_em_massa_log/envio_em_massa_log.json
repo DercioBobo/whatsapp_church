@@ -46,7 +46,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Status",
-            "options": "Pendente\nEnviado\nFalhado",
+            "options": "Pendente\nEnviado\nFalhado\nCancelado",
             "default": "Pendente"
         },
         {

@@ -35,6 +35,8 @@
         "enable_rate_limiting",
         "messages_per_minute",
         "column_break_rate",
+        "delay_envio_massa",
+        "limite_delay_massa",
         "queue_enabled",
         "section_media",
         "media_doctypes",
@@ -228,6 +230,21 @@
         {
             "fieldname": "column_break_rate",
             "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "delay_envio_massa",
+            "fieldtype": "Int",
+            "label": "Delay Envio em Massa (segundos)",
+            "description": "Pausa extra entre cada mensagem (adicional ao delay do Evolution). 0 = depende apenas do Evolution. Recomendado: 5-10 s para evitar bans."
+        },
+        {
+            "default": "20",
+            "fieldname": "limite_delay_massa",
+            "fieldtype": "Int",
+            "label": "Aplicar Delay a partir de (destinatários)",
+            "description": "Número mínimo de destinatários para activar o delay extra. Abaixo deste valor o delay não é aplicado.",
+            "depends_on": "eval:doc.delay_envio_massa > 0"
         },
         {
             "default": "1",

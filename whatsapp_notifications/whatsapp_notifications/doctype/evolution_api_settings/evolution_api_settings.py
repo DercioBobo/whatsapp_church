@@ -268,6 +268,8 @@ def get_settings():
                 "enable_debug_logging": doc.enable_debug_logging,
                 "enable_rate_limiting": doc.enable_rate_limiting,
                 "messages_per_minute": doc.messages_per_minute or 20,
+                "delay_envio_massa": doc.delay_envio_massa or 0,
+                "limite_delay_massa": doc.limite_delay_massa or 20,
                 "queue_enabled": doc.queue_enabled,
                 "media_doctypes": media_doctypes,
             }
@@ -290,6 +292,8 @@ def get_settings():
                 "enable_debug_logging": False,
                 "enable_rate_limiting": False,
                 "messages_per_minute": 20,
+                "delay_envio_massa": 0,
+                "limite_delay_massa": 20,
                 "queue_enabled": True,
                 "media_doctypes": [],
             }
