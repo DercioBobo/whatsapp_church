@@ -165,6 +165,15 @@ def send_whatsapp(phone, message, doctype=None, docname=None, queue=True):
         return result
 
 
+def _rule_uses_child_table(notification_rule):
+    if not notification_rule:
+        return False
+    try:
+        return frappe.db.get_value("WhatsApp Notification Rule", notification_rule, "use_child_table") or False
+    except Exception:
+        return False
+
+
 def send_whatsapp_notification(phone, message, reference_doctype=None, reference_name=None,
                                notification_rule=None, recipient_name=None):
     """
@@ -276,8 +285,8 @@ def process_message_log(log_name):
             
             log.mark_sent(response_data=response, response_id=response_id)
 
-            # Add timeline comment to the referenced document
-            if log.reference_doctype and log.reference_name:
+            # Add timeline comment to the referenced document (skip for child-table rules)
+            if log.reference_doctype and log.reference_name and not _rule_uses_child_table(log.notification_rule):
                 from whatsapp_notifications.whatsapp_notifications.utils import add_notification_sent_comment
                 add_notification_sent_comment(
                     log.reference_doctype,
@@ -634,8 +643,8 @@ def process_media_message_log(log_name):
             frappe.db.set_value("WhatsApp Message Log", log_name, "_media_mimetype", None, update_modified=False)
             frappe.db.commit()
 
-            # Add timeline comment to the referenced document
-            if log.reference_doctype and log.reference_name:
+            # Add timeline comment to the referenced document (skip for child-table rules)
+            if log.reference_doctype and log.reference_name and not _rule_uses_child_table(log.notification_rule):
                 from whatsapp_notifications.whatsapp_notifications.utils import add_notification_sent_comment
                 add_notification_sent_comment(
                     log.reference_doctype,
