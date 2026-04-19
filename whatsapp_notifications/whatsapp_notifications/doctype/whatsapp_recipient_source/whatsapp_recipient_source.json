@@ -1,0 +1,44 @@
+{
+    "actions": [],
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "source_doctype",
+        "phone_field",
+        "filters"
+    ],
+    "fields": [
+        {
+            "fieldname": "source_doctype",
+            "fieldtype": "Link",
+            "label": "DocType",
+            "options": "DocType",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "phone_field",
+            "fieldtype": "Select",
+            "label": "Phone Field",
+            "reqd": 1,
+            "in_list_view": 1,
+            "description": "Field containing the phone number on the selected DocType"
+        },
+        {
+            "fieldname": "filters",
+            "fieldtype": "Small Text",
+            "label": "Filters (JSON)",
+            "in_list_view": 1,
+            "description": "Optional. JSON filters. Values support Jinja: {\"status\": \"Activo\", \"fase\": \"{{ doc.fase }}\"}"
+        }
+    ],
+    "istable": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "WhatsApp Notifications",
+    "name": "WhatsApp Recipient Source",
+    "owner": "Administrator",
+    "permissions": []
+}

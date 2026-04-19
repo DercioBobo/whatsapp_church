@@ -28,6 +28,8 @@
         "group_id",
         "group_name",
         "select_group_button",
+        "section_recipient_sources",
+        "recipient_sources",
         "section_row_conditions",
         "only_changed_rows",
         "child_watch_fields",
@@ -205,6 +207,19 @@
             "fieldtype": "Button",
             "label": "Select Group",
             "depends_on": "eval:doc.recipient_type=='WhatsApp Group' || doc.recipient_type=='Document + Group'"
+        },
+        {
+            "fieldname": "section_recipient_sources",
+            "fieldtype": "Section Break",
+            "label": "Additional Recipients from Other DocTypes",
+            "collapsible": 1,
+            "description": "Send to contacts fetched from another DocType, optionally filtered. Adds to the recipients above."
+        },
+        {
+            "fieldname": "recipient_sources",
+            "fieldtype": "Table",
+            "label": "Recipient Sources",
+            "options": "WhatsApp Recipient Source"
         },
         {
             "fieldname": "section_row_conditions",

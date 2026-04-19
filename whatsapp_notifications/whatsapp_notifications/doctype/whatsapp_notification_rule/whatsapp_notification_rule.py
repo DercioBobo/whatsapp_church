@@ -395,6 +395,19 @@ class WhatsAppNotificationRule(Document):
         if self.recipient_type in ("WhatsApp Group", "Document + Group") and self.group_id:
             recipients.append({"type": "group", "value": self.group_id})
 
+        # Additional recipients from other DocTypes
+        for source in (getattr(self, "recipient_sources", None) or []):
+            try:
+                for phone in _resolve_recipient_source(source, doc):
+                    recipients.append({"type": "phone", "value": phone})
+            except Exception as e:
+                frappe.log_error(
+                    "Recipient source error (rule: {}, doctype: {}): {}".format(
+                        self.name, source.source_doctype, str(e)
+                    ),
+                    "WhatsApp Recipient Source Error"
+                )
+
         # Remove duplicates while preserving order.
         # For child-table recipients the same phone may appear for multiple rows;
         # include the row name in the key so each (phone, row) pair is kept.
@@ -676,6 +689,53 @@ def _evaluate_condition_result(rendered):
 
     # Any other non-empty string (e.g. a rendered number like "42") → truthy
     return True
+
+
+def _resolve_recipient_source(source, doc):
+    """
+    Fetch phone numbers from an external DocType based on the source row config.
+    Filters values support Jinja referencing the triggering doc (e.g. {{ doc.fase }}).
+
+    Returns:
+        list[str]: Individual phone number strings ready for sending
+    """
+    import json
+
+    if not source.source_doctype or not source.phone_field:
+        return []
+
+    filters = {}
+    if source.filters:
+        try:
+            context = get_template_context(doc)
+            rendered = frappe.render_template(source.filters, context, safe_render=False)
+            filters = json.loads(rendered)
+        except Exception as e:
+            frappe.log_error(
+                "Recipient source filter error ({}): {}".format(source.source_doctype, str(e)),
+                "WhatsApp Recipient Source Error"
+            )
+            return []
+
+    try:
+        records = frappe.get_all(
+            source.source_doctype,
+            filters=filters,
+            fields=[source.phone_field]
+        )
+    except Exception as e:
+        frappe.log_error(
+            "Recipient source query error ({}): {}".format(source.source_doctype, str(e)),
+            "WhatsApp Recipient Source Error"
+        )
+        return []
+
+    phones = []
+    for r in records:
+        phone = r.get(source.phone_field)
+        for p in _split_phone_value(phone):
+            phones.append(p)
+    return phones
 
 
 def get_template_context(doc):
