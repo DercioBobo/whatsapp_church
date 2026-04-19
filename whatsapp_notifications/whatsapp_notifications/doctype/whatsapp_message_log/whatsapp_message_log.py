@@ -149,7 +149,8 @@ def create_message_log(phone, message, reference_doctype=None, reference_name=No
         "media_type": media_type,
         "file_name": file_name,
         "file_size": file_size,
-        "caption": caption
+        "caption": caption,
+        "reminder_days_offset": getattr(frappe.local, "current_reminder_offset", None) or 0
     })
 
     log.insert(ignore_permissions=True)

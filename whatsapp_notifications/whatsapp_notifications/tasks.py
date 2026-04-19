@@ -367,25 +367,22 @@ def process_date_event_rules():
 def _process_date_rule(rule, today, settings, process_rule_fn):
     """
     Process a single Days Before/After rule against all matching documents.
-
-    Args:
-        rule: WhatsApp Notification Rule document
-        today: date object for today
-        settings: Evolution API settings dict
-        process_rule_fn: function reference for process_rule (to avoid circular import)
+    Dispatches to reminder-offsets path when the rule has a reminder_offsets table.
     """
+    if getattr(rule, "reminder_offsets", None):
+        _process_reminder_offsets_rule(rule, today, settings, process_rule_fn)
+        return
+
+    # --- Original single-offset path (unchanged) ---
     from frappe.utils import add_days
     from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule import has_sent_for_rule
 
     if not rule.date_field or not rule.days_offset:
         return
 
-    # Calculate target date: the document's date field value we're looking for
     if rule.event == "Days Before":
-        # Notify X days BEFORE the event → find docs where date_field = today + X
         target_date = add_days(today, rule.days_offset)
-    else:  # Days After
-        # Notify X days AFTER the event → find docs where date_field = today - X
+    else:
         target_date = add_days(today, -rule.days_offset)
 
     if not rule.is_within_active_hours():
@@ -408,7 +405,6 @@ def _process_date_rule(rule, today, settings, process_rule_fn):
 
     for docname in doc_names:
         try:
-            # Prevent duplicate sends within the same day (multiple scheduler runs)
             sent_today = frappe.db.exists("WhatsApp Message Log", {
                 "notification_rule": rule.name,
                 "reference_doctype": rule.document_type,
@@ -419,7 +415,6 @@ def _process_date_rule(rule, today, settings, process_rule_fn):
             if sent_today:
                 continue
 
-            # Respect send_once: never resend if already sent for this doc
             if rule.send_once and has_sent_for_rule(rule.name, rule.document_type, docname):
                 continue
 
@@ -431,6 +426,91 @@ def _process_date_rule(rule, today, settings, process_rule_fn):
                 "Date rule {} - error processing doc {}: {}".format(rule.name, docname, str(e)),
                 "WhatsApp Date Rule Error"
             )
+
+
+def _process_reminder_offsets_rule(rule, today, settings, process_rule_fn):
+    """
+    Process a Days Before/After rule that uses the reminder_offsets child table.
+    Each offset row fires independently, exactly once per doc.
+    First-ever send uses message_template; subsequent sends use reminder_message_template.
+    """
+    from frappe.utils import add_days
+
+    if not rule.date_field:
+        return
+
+    if not rule.is_within_active_hours():
+        return
+
+    for offset_row in rule.reminder_offsets:
+        days = offset_row.days
+        if not days:
+            continue
+
+        if rule.event == "Days Before":
+            target_date = add_days(today, days)
+        else:
+            target_date = add_days(today, -days)
+
+        try:
+            doc_names = frappe.get_all(
+                rule.document_type,
+                filters={rule.date_field: str(target_date)},
+                pluck="name"
+            )
+        except Exception as e:
+            frappe.log_error(
+                "Reminder rule {} offset {} - error querying '{}': {}".format(
+                    rule.name, days, rule.document_type, str(e)
+                ),
+                "WhatsApp Date Rule Query Error"
+            )
+            continue
+
+        for docname in doc_names:
+            try:
+                # Skip if this specific offset already sent (or pending) for this doc
+                already_sent = frappe.db.exists("WhatsApp Message Log", {
+                    "notification_rule": rule.name,
+                    "reference_doctype": rule.document_type,
+                    "reference_name": docname,
+                    "reminder_days_offset": days,
+                    "status": ["in", ["Sent", "Pending", "Sending", "Queued"]]
+                })
+                if already_sent:
+                    continue
+
+                doc = frappe.get_doc(rule.document_type, docname)
+
+                # First-ever send → use message_template; subsequent → reminder_message_template
+                is_first = not frappe.db.exists("WhatsApp Message Log", {
+                    "notification_rule": rule.name,
+                    "reference_doctype": rule.document_type,
+                    "reference_name": docname,
+                    "status": ["in", ["Sent", "Pending", "Sending", "Queued"]]
+                })
+
+                original_template = None
+                if not is_first and rule.reminder_message_template:
+                    original_template = rule.message_template
+                    rule.message_template = rule.reminder_message_template
+
+                # Pass the offset through frappe.local so create_message_log can store it
+                frappe.local.current_reminder_offset = days
+                try:
+                    process_rule_fn(doc, rule, settings)
+                finally:
+                    frappe.local.current_reminder_offset = None
+                    if original_template is not None:
+                        rule.message_template = original_template
+
+            except Exception as e:
+                frappe.log_error(
+                    "Reminder rule {} offset {} - error processing doc {}: {}".format(
+                        rule.name, days, docname, str(e)
+                    ),
+                    "WhatsApp Date Rule Error"
+                )
 
 
 def detect_stalled_envios():

@@ -12,7 +12,9 @@
       "Bash(find:*)",
       "Bash(echo Python validation skipped \\(no python in PATH\\):*)",
       "Bash(node:*)",
-      "Bash(bench:*)"
+      "Bash(bench:*)",
+      "Read(//c/Users/DBobo/PhpstormProjects/church_portal/**)",
+      "Read(//c/Users/DBobo/PhpstormProjects/church_portal//**)"
     ]
   }
 }

@@ -16,6 +16,7 @@
         "value_changed",
         "days_offset",
         "date_field",
+        "reminder_offsets",
         "section_recipient",
         "recipient_type",
         "use_child_table",
@@ -36,6 +37,7 @@
         "print_format",
         "fixed_file",
         "message_template",
+        "reminder_message_template",
         "section_owner_notification",
         "notify_owner",
         "owner_message_template",
@@ -110,9 +112,9 @@
             "fieldname": "days_offset",
             "fieldtype": "Int",
             "label": "Days",
-            "description": "Number of days before or after the date field. Example: 3 = send 3 days before/after.",
+            "description": "Number of days before or after the date field. Not required when using Reminder Offsets below.",
             "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
-            "mandatory_depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'"
+            "mandatory_depends_on": "eval:(doc.event=='Days Before' || doc.event=='Days After') && !(doc.reminder_offsets && doc.reminder_offsets.length > 0)"
         },
         {
             "fieldname": "date_field",
@@ -121,6 +123,14 @@
             "description": "Date field in the document to watch. The notification fires when today matches that date minus/plus the Days offset.",
             "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
             "mandatory_depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'"
+        },
+        {
+            "fieldname": "reminder_offsets",
+            "fieldtype": "Table",
+            "label": "Reminder Offsets",
+            "options": "WhatsApp Notification Reminder",
+            "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
+            "description": "Add multiple reminder points (e.g. 30, 15, 5 days before). When set, the 'Days' field above is ignored. First send uses the Message Template; subsequent sends use the Reminder Template."
         },
         {
             "fieldname": "section_recipient",
@@ -260,6 +270,14 @@
             "reqd": 1,
             "options": "Jinja",
             "description": "Jinja2 template for the message. Use {{ doc.fieldname }} to include document fields."
+        },
+        {
+            "fieldname": "reminder_message_template",
+            "fieldtype": "Code",
+            "label": "Reminder Message Template",
+            "options": "Jinja",
+            "depends_on": "eval:(doc.event=='Days Before' || doc.event=='Days After') && doc.reminder_offsets && doc.reminder_offsets.length > 0",
+            "description": "Template used for the 2nd, 3rd... sends. If empty, the main Message Template is reused. Use {{ doc.fieldname }} as usual."
         },
         {
             "fieldname": "section_owner_notification",

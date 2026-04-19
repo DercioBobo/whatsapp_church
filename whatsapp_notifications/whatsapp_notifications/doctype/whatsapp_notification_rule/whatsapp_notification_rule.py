@@ -94,8 +94,17 @@ class WhatsAppNotificationRule(Document):
             return
         if not self.date_field:
             frappe.throw(_("'Date Field' is required for the '{}' event").format(self.event))
-        if not self.days_offset or self.days_offset <= 0:
-            frappe.throw(_("'Days' must be a positive number for the '{}' event").format(self.event))
+
+        has_reminder_offsets = bool(getattr(self, "reminder_offsets", None))
+
+        if not has_reminder_offsets:
+            if not self.days_offset or self.days_offset <= 0:
+                frappe.throw(_("'Days' must be a positive number for the '{}' event (or add Reminder Offsets)").format(self.event))
+        else:
+            for row in self.reminder_offsets:
+                if not row.days or row.days <= 0:
+                    frappe.throw(_("All Reminder Offset rows must have a positive 'Days' value"))
+
         if self.document_type:
             meta = frappe.get_meta(self.document_type)
             field = meta.get_field(self.date_field)
@@ -139,6 +148,14 @@ class WhatsAppNotificationRule(Document):
                 pass
             except Exception as e:
                 frappe.throw(_("Invalid owner message template: {}").format(str(e)))
+
+        if self.reminder_message_template:
+            try:
+                frappe.render_template(self.reminder_message_template, dummy_context, safe_render=False)
+            except (frappe.DoesNotExistError, frappe.ValidationError):
+                pass
+            except Exception as e:
+                frappe.throw(_("Invalid reminder message template: {}").format(str(e)))
     
     def validate_condition(self):
         """Test condition syntax"""

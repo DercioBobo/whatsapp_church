@@ -26,6 +26,7 @@
         "reference_name",
         "column_break_reference",
         "notification_rule",
+        "reminder_days_offset",
         "section_response",
         "response_id",
         "response_data",
@@ -168,6 +169,14 @@
             "label": "Notification Rule",
             "options": "WhatsApp Notification Rule",
             "read_only": 1
+        },
+        {
+            "fieldname": "reminder_days_offset",
+            "fieldtype": "Int",
+            "label": "Reminder Offset (Days)",
+            "hidden": 1,
+            "read_only": 1,
+            "description": "Days offset of the reminder that triggered this log (0 = single Days Before/After rule)"
         },
         {
             "fieldname": "section_response",
