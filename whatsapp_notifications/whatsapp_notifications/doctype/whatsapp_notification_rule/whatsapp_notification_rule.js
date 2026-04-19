@@ -843,6 +843,54 @@ function show_test_dialog(frm) {
     dialog.show();
 }
 
+// ─── Recipient Sources Child Table ──────────────────────────────────────────
+
+frappe.ui.form.on('WhatsApp Recipient Source', {
+    source_doctype: function (frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (!row.source_doctype) return;
+
+        frappe.call({
+            method: 'whatsapp_notifications.whatsapp_notifications.api.get_doctype_fields',
+            args: { doctype: row.source_doctype },
+            callback: function (r) {
+                if (!r.message || !r.message.success) return;
+
+                let options = [''].concat(
+                    r.message.fields.map(f => f.fieldname)
+                );
+
+                // Update the Select field options for this row
+                let field = frappe.meta.get_docfield('WhatsApp Recipient Source', 'phone_field', cdn);
+                if (field) {
+                    field.options = options.join('\n');
+                }
+
+                frappe.model.set_value(cdt, cdn, 'phone_field', '');
+                frm.refresh_field('recipient_sources');
+            }
+        });
+    },
+
+    filters: function (frm, cdt, cdn) {
+        _show_no_filter_warning(frm, cdt, cdn);
+    },
+
+    recipient_sources_add: function (frm, cdt, cdn) {
+        _show_no_filter_warning(frm, cdt, cdn);
+    }
+});
+
+function _show_no_filter_warning(frm, cdt, cdn) {
+    let row = locals[cdt][cdn];
+    if (row.source_doctype && !row.filters) {
+        frappe.show_alert({
+            message: __('No filter set — this source will fetch ALL records from {0}', [row.source_doctype]),
+            indicator: 'orange'
+        }, 6);
+    }
+}
+
 // ─── Group Selection Dialog ──────────────────────────────────────────────────
 
 function show_group_selection_dialog(frm) {
