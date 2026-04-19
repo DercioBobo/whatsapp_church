@@ -30,9 +30,10 @@
             "fieldtype": "Small Text",
             "label": "Filters (JSON)",
             "in_list_view": 1,
-            "description": "Optional. JSON filters. Values support Jinja: {\"status\": \"Activo\", \"fase\": \"{{ doc.fase }}\"}"
+            "description": "Optional JSON filters. Leave empty to fetch all records. Examples — single: {\"status\": \"Activo\"} | combined: {\"status\": \"Activo\", \"fase\": \"{{ doc.fase }}\"} | from doc: {\"ano_lectivo\": \"{{ doc.ano_lectivo }}\"} | multiple from doc: {\"fase\": \"{{ doc.fase }}\", \"ano_lectivo\": \"{{ doc.ano_lectivo }}\"}"
         }
     ],
+    "editable_grid": 1,
     "istable": 1,
     "links": [],
     "modified": "2024-01-01 00:00:00.000000",

@@ -16,6 +16,7 @@
             "description": "Number of days before (or after) the date to send this reminder"
         }
     ],
+    "editable_grid": 1,
     "istable": 1,
     "links": [],
     "modified": "2024-01-01 00:00:00.000000",

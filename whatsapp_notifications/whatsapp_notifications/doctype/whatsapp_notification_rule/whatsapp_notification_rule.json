@@ -132,7 +132,7 @@
             "label": "Reminder Offsets",
             "options": "WhatsApp Notification Reminder",
             "depends_on": "eval:doc.event=='Days Before' || doc.event=='Days After'",
-            "in_place_edit": 1,
+            "editable_grid": 1,
             "description": "Add multiple reminder points (e.g. 30, 15, 5 days before). When set, the 'Days' field above is ignored. First send uses the Message Template; subsequent sends use the Reminder Template."
         },
         {
@@ -213,7 +213,6 @@
             "fieldname": "section_recipient_sources",
             "fieldtype": "Section Break",
             "label": "Additional Recipients from Other DocTypes",
-            "collapsible": 1,
             "description": "Send to contacts fetched from another DocType, optionally filtered. Adds to the recipients above."
         },
         {
@@ -221,7 +220,7 @@
             "fieldtype": "Table",
             "label": "Recipient Sources",
             "options": "WhatsApp Recipient Source",
-            "in_place_edit": 1
+            "editable_grid": 1
         },
         {
             "fieldname": "section_row_conditions",
