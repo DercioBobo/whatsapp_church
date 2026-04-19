@@ -860,14 +860,23 @@ frappe.ui.form.on('WhatsApp Recipient Source', {
                     r.message.fields.map(f => f.fieldname)
                 );
 
-                // Update the Select field options for this row
-                let field = frappe.meta.get_docfield('WhatsApp Recipient Source', 'phone_field', cdn);
-                if (field) {
-                    field.options = options.join('\n');
-                }
+                // Update the global meta — get_docfield with cdn returns a copy,
+                // so we must update the source directly to affect rendered cells
+                let df = frappe.meta.get_docfield('WhatsApp Recipient Source', 'phone_field');
+                if (df) df.options = options.join('\n');
 
                 frappe.model.set_value(cdt, cdn, 'phone_field', '');
                 frm.refresh_field('recipient_sources');
+
+                // Also update the rendered grid row cell if grid is in edit mode
+                let grid = frm.fields_dict['recipient_sources'] && frm.fields_dict['recipient_sources'].grid;
+                if (grid) {
+                    let grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[cdn];
+                    if (grid_row && grid_row.columns && grid_row.columns['phone_field']) {
+                        grid_row.columns['phone_field'].df.options = options.join('\n');
+                        grid_row.columns['phone_field'].refresh();
+                    }
+                }
             }
         });
     },
