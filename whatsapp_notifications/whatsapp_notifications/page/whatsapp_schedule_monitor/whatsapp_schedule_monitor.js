@@ -69,6 +69,13 @@ function render_page(page, data) {
         retomar_envio(envio_name, page);
     });
 
+    // Wire matching-docs buttons
+    $(page.wrapper).find(".show-matches-btn").on("click", function () {
+        var idx = $(this).data("match-idx");
+        var info = (window._whatsapp_monitor_match_docs || {})[idx] || {};
+        show_matching_docs_dialog(info.docs || [], info.has_more, info.rule_name, info.doctype);
+    });
+
     // Auto-refresh if any envio is running
     var has_running = (data.bulk_sends || []).some(e => e.status === 'Em Execução');
     if (has_running) {
@@ -204,7 +211,18 @@ function run_birthday_now(rule_name, page) {
 // ---------------------------------------------------------------------------
 
 function render_date_event_section(rules) {
-    var rows = (rules || []).map(r => render_date_event_row(r)).join("");
+    window._whatsapp_monitor_match_docs = {};
+    var rows = (rules || []).map((r, i) => {
+        window._whatsapp_monitor_match_docs[i] = {
+            docs: r.matching_docs || [],
+            has_more: r.has_more || false,
+            rule_name: r.rule_name || r.name,
+            doctype: r.document_type
+        };
+        return render_date_event_row(r, i);
+    }).join("");
+
+    var unique_rule_count = new Set((rules || []).map(r => r.name)).size;
 
     return `
     <div class="card" style="${card_style()}">
@@ -213,7 +231,7 @@ function render_date_event_section(rules) {
                 📅 ${__("Days Before / After Rules")}
             </span>
             <span class="badge" style="background:#f0f4f8;color:#6c757d;padding:4px 10px;border-radius:20px;font-size:12px;">
-                ${rules.length} ${__("rules")}
+                ${unique_rule_count} ${__("rules")} · ${rules.length} ${__("offsets")}
             </span>
         </div>
         ${rules.length === 0
@@ -241,21 +259,33 @@ function render_date_event_section(rules) {
     </div>`;
 }
 
-function render_date_event_row(r) {
+function render_date_event_row(r, idx) {
     var enabled_badge = r.enabled
         ? `<span style="${badge_style("green")}">${__("Active")}</span>`
         : `<span style="${badge_style("gray")}">${__("Disabled")}</span>`;
 
+    var offset_days = r.active_offset_days || r.days_offset;
     var event_label = r.event === "Days Before"
-        ? `<span style="color:#e65100;">${r.days_offset} ${__("day(s) before")}</span>`
-        : `<span style="color:#1565c0;">${r.days_offset} ${__("day(s) after")}</span>`;
+        ? `<span style="color:#e65100;">${offset_days} ${__("day(s) before")}</span>`
+        : `<span style="color:#1565c0;">${offset_days} ${__("day(s) after")}</span>`;
+    if (r.has_reminder_offsets) {
+        event_label += ` <span style="${badge_style("blue")}" title="${__("Part of Reminder Offsets series")}">R</span>`;
+    }
 
-    var matches_html = (r.matches_today || 0).toString();
-    if (r.matches_today > 0 && r.sent_today === 0) {
+    var has_docs = r.matching_docs && r.matching_docs.length > 0;
+    var docs_btn = has_docs
+        ? `<button class="btn btn-xs btn-default show-matches-btn" data-match-idx="${idx}"
+              style="margin-left:4px;padding:0 5px;font-size:11px;" title="${__("View matching documents")}">🔗</button>`
+        : "";
+
+    var matches_html;
+    if (!r.matches_today) {
+        matches_html = `<span class="text-muted">0</span>`;
+    } else if (r.matches_today > 0 && r.sent_today === 0) {
         matches_html = `<b style="color:#e65100;">${r.matches_today}</b>
-            <span style="${badge_style("orange")}">${__("Pending")}</span>`;
-    } else if (r.matches_today > 0 && r.sent_today > 0) {
-        matches_html = `<b>${r.matches_today}</b>`;
+            <span style="${badge_style("orange")}">${__("Pending")}</span>${docs_btn}`;
+    } else {
+        matches_html = `<b>${r.matches_today}</b>${docs_btn}`;
     }
 
     var sent_today_html = r.sent_today > 0
@@ -278,6 +308,32 @@ function render_date_event_row(r) {
         <td style="font-size:12px;">${r.active_hours_label || "Anytime"}</td>
         <td>${last_sent_html}</td>
     </tr>`;
+}
+
+function show_matching_docs_dialog(docs, has_more, rule_name, doctype) {
+    var rows = docs.map(function(d) {
+        var slug = frappe.router.slug(d.doctype || doctype || "");
+        return `<div style="padding:6px 4px;border-bottom:1px solid #f0f0f0;">
+            <a href="/app/${slug}/${encodeURIComponent(d.name)}" target="_blank"
+               style="font-size:13px;font-weight:500;">${d.name}</a>
+        </div>`;
+    }).join("");
+
+    if (has_more) {
+        rows += `<div style="padding:8px 4px;color:#999;font-size:11px;font-style:italic;">
+            ${__("Showing first 20 — there may be more documents.")}
+        </div>`;
+    }
+
+    if (!rows) {
+        rows = `<p class="text-muted">${__("No matching documents found.")}</p>`;
+    }
+
+    frappe.msgprint({
+        title: __("Matching Documents") + (rule_name ? ` — ${rule_name}` : ""),
+        indicator: "blue",
+        message: `<div style="max-height:420px;overflow-y:auto;min-width:260px;">${rows}</div>`
+    });
 }
 
 // ---------------------------------------------------------------------------

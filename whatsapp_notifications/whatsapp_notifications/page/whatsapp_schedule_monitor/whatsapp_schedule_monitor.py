@@ -121,16 +121,49 @@ def _get_date_event_rules():
     )
 
     today_str = today()
+    result = []
 
     for rule in rules:
-        target = _calc_target_date(rule, today_str)
-        rule["target_date"] = str(target) if target else None
-        rule["matches_today"] = _count_date_rule_matches(rule, target)
-        rule["sent_today"] = _count_sent_today(rule["name"])
-        rule["last_sent"] = _get_last_sent(rule["name"])
-        rule["active_hours_label"] = _active_hours_label(rule)
+        offsets = frappe.get_all(
+            "WhatsApp Notification Reminder",
+            filters={"parent": rule["name"], "parenttype": "WhatsApp Notification Rule"},
+            fields=["days"],
+            order_by="days desc"
+        )
 
-    return rules
+        if offsets:
+            rule["has_reminder_offsets"] = True
+            for offset_row in offsets:
+                days = int(offset_row["days"] or 0)
+                if not days:
+                    continue
+                entry = dict(rule)
+                entry["active_offset_days"] = days
+                target = _calc_target_date_from_days(rule["event"], today_str, days)
+                entry["target_date"] = str(target) if target else None
+                match_info = _get_date_rule_matches(rule, target)
+                entry["matches_today"] = match_info["count"]
+                entry["matching_docs"] = match_info["docs"]
+                entry["has_more"] = match_info["has_more"]
+                entry["sent_today"] = _count_sent_today_offset(rule["name"], days)
+                entry["last_sent"] = _get_last_sent(rule["name"])
+                entry["active_hours_label"] = _active_hours_label(rule)
+                result.append(entry)
+        else:
+            rule["has_reminder_offsets"] = False
+            rule["active_offset_days"] = rule.get("days_offset")
+            target = _calc_target_date(rule, today_str)
+            rule["target_date"] = str(target) if target else None
+            match_info = _get_date_rule_matches(rule, target)
+            rule["matches_today"] = match_info["count"]
+            rule["matching_docs"] = match_info["docs"]
+            rule["has_more"] = match_info["has_more"]
+            rule["sent_today"] = _count_sent_today(rule["name"])
+            rule["last_sent"] = _get_last_sent(rule["name"])
+            rule["active_hours_label"] = _active_hours_label(rule)
+            result.append(rule)
+
+    return result
 
 
 def _calc_target_date(rule, today_str):
@@ -143,18 +176,29 @@ def _calc_target_date(rule, today_str):
         return getdate(add_days(today_str, -offset))
 
 
-def _count_date_rule_matches(rule, target_date):
+def _calc_target_date_from_days(event, today_str, days):
+    if not days:
+        return None
+    if event == "Days Before":
+        return getdate(add_days(today_str, days))
+    else:
+        return getdate(add_days(today_str, -days))
+
+
+def _get_date_rule_matches(rule, target_date, limit=20):
     if not rule.get("document_type") or not rule.get("date_field") or not target_date:
-        return 0
+        return {"count": 0, "docs": [], "has_more": False}
     try:
-        result = frappe.get_all(
+        all_names = frappe.get_all(
             rule["document_type"],
             filters={rule["date_field"]: str(target_date)},
             pluck="name"
         )
-        return len(result)
+        count = len(all_names)
+        docs = [{"name": n, "doctype": rule["document_type"]} for n in all_names[:limit]]
+        return {"count": count, "docs": docs, "has_more": count > limit}
     except Exception:
-        return 0
+        return {"count": 0, "docs": [], "has_more": False}
 
 
 def _count_sent_today(rule_name):
@@ -164,6 +208,20 @@ def _count_sent_today(rule_name):
                WHERE notification_rule = %s
                AND DATE(creation) = CURDATE()""",
             rule_name
+        )
+        return int(result[0][0]) if result else 0
+    except Exception:
+        return 0
+
+
+def _count_sent_today_offset(rule_name, offset_days):
+    try:
+        result = frappe.db.sql(
+            """SELECT COUNT(*) FROM `tabWhatsApp Message Log`
+               WHERE notification_rule = %s
+               AND reminder_days_offset = %s
+               AND DATE(creation) = CURDATE()""",
+            (rule_name, offset_days)
         )
         return int(result[0][0]) if result else 0
     except Exception:
