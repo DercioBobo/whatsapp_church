@@ -228,6 +228,7 @@ def process_rule(doc, rule, settings):
                 message = rule.render_message(doc, row=row, changed_fields=changed_fields, row_before=row_before)
 
                 if message_type == 'Text Only' and not message:
+                    _create_render_failure_log(recipient, doc, rule)
                     continue
 
                 recipient_name = _get_row_recipient_name(row) if row else None
@@ -251,6 +252,8 @@ def process_rule(doc, rule, settings):
                 "Empty message for rule {} on {}".format(rule.name, doc.name),
                 "WhatsApp Template Error"
             )
+            for recipient in recipients:
+                _create_render_failure_log(recipient, doc, rule)
             return
 
         for recipient in recipients:
@@ -693,6 +696,34 @@ def send_media_notification(phone, formatted_phone, message, reference_doctype, 
             ),
             "WhatsApp Media Error"
         )
+
+
+def _create_render_failure_log(recipient, doc, rule, error_hint="Template render failed — check WhatsApp Template Error log"):
+    """
+    Create a Failed Message Log entry when template rendering produces no message.
+    This makes the failure visible in the monitor and retryable from the UI.
+    """
+    try:
+        from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_message_log.whatsapp_message_log import create_message_log
+        phone = recipient.get("value", "") if isinstance(recipient, dict) else str(recipient or "")
+        if not phone:
+            return
+        log = create_message_log(
+            phone=phone,
+            message="",
+            reference_doctype=doc.doctype,
+            reference_name=doc.name,
+            notification_rule=rule.name,
+            recipient_name=None,
+            formatted_phone=phone,
+        )
+        frappe.db.set_value("WhatsApp Message Log", log.name, {
+            "status": "Failed",
+            "error_message": error_hint[:500]
+        })
+        frappe.db.commit()
+    except Exception:
+        pass  # Never let log creation hide the original error
 
 
 def get_event_name(event_label):

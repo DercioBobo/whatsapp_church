@@ -323,6 +323,128 @@ def trigger_cleanup():
     return {"status": "triggered"}
 
 
+@frappe.whitelist()
+def run_date_rule_now(rule_name, force=0):
+    """
+    Manually run a Days Before/After rule for today's matching documents.
+    force=1 skips the 'already sent today' and 'send_once' checks.
+    """
+    from frappe.utils import nowdate, getdate, add_days
+    from whatsapp_notifications.whatsapp_notifications.doctype.evolution_api_settings.evolution_api_settings import get_settings
+    from whatsapp_notifications.whatsapp_notifications.events import process_rule
+    from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_notification_rule.whatsapp_notification_rule import has_sent_for_rule
+
+    settings = get_settings()
+    if not settings.get("enabled"):
+        return {"success": False, "error": "WhatsApp notifications are disabled"}
+
+    rule = frappe.get_doc("WhatsApp Notification Rule", rule_name)
+
+    if rule.event not in ("Days Before", "Days After"):
+        return {"success": False, "error": "Rule is not a Days Before/After rule"}
+
+    if not rule.date_field:
+        return {"success": False, "error": "No date field configured"}
+
+    force = frappe.utils.cint(force)
+    today = getdate(nowdate())
+
+    offsets = []
+    if getattr(rule, "reminder_offsets", None):
+        for row in rule.reminder_offsets:
+            if row.days:
+                offsets.append(int(row.days))
+    elif rule.days_offset:
+        offsets.append(int(rule.days_offset))
+
+    if not offsets:
+        return {"success": False, "error": "No day offsets configured"}
+
+    processed = 0
+    skipped = 0
+    error_list = []
+
+    # Temporarily bypass send_once so process_rule's is_applicable() doesn't block us
+    original_send_once = rule.send_once
+    if force:
+        rule.send_once = 0
+
+    try:
+        for days in offsets:
+            target_date = add_days(today, days) if rule.event == "Days Before" else add_days(today, -days)
+
+            try:
+                doc_names = frappe.get_all(
+                    rule.document_type,
+                    filters={rule.date_field: str(target_date)},
+                    pluck="name"
+                )
+            except Exception as e:
+                error_list.append(str(e))
+                continue
+
+            for docname in doc_names:
+                try:
+                    if not force:
+                        sent_today = frappe.db.exists("WhatsApp Message Log", {
+                            "notification_rule": rule.name,
+                            "reference_doctype": rule.document_type,
+                            "reference_name": docname,
+                            "status": ["in", ["Sent", "Pending", "Sending", "Queued"]],
+                            "creation": [">=", frappe.utils.today()]
+                        })
+                        if sent_today:
+                            skipped += 1
+                            continue
+
+                        if rule.send_once and has_sent_for_rule(rule.name, rule.document_type, docname):
+                            skipped += 1
+                            continue
+
+                    doc = frappe.get_doc(rule.document_type, docname)
+                    process_rule(doc, rule, settings)
+                    processed += 1
+
+                except Exception as e:
+                    error_list.append("{}: {}".format(docname, str(e)))
+                    frappe.log_error(
+                        "run_date_rule_now {} - error on {}: {}".format(rule.name, docname, str(e)),
+                        "WhatsApp Manual Run Error"
+                    )
+    finally:
+        rule.send_once = original_send_once
+
+    return {"success": True, "processed": processed, "skipped": skipped, "errors": error_list}
+
+
+@frappe.whitelist()
+def retry_single_message_log(log_name):
+    """
+    Retry a specific Failed message log entry, ignoring max_retries limit.
+    """
+    from whatsapp_notifications.whatsapp_notifications.api import process_message_log, process_media_message_log
+
+    log = frappe.get_doc("WhatsApp Message Log", log_name)
+
+    if log.status != "Failed":
+        return {"success": False, "error": "Message is not Failed (current: {})".format(log.status)}
+
+    retry_count = (log.retry_count or 0) + 1
+    frappe.db.set_value("WhatsApp Message Log", log_name, {
+        "status": "Pending",
+        "retry_count": retry_count,
+        "error_message": None
+    })
+    frappe.db.commit()
+
+    if log.message_type in ("Media", "Document"):
+        process_media_message_log(log_name)
+    else:
+        process_message_log(log_name)
+
+    return {"success": True, "retry_count": retry_count}
+
+
 def process_date_event_rules():
     """
     Process 'Days Before' and 'Days After' notification rules.

@@ -6,6 +6,7 @@ frappe.pages["whatsapp-schedule-monitor"].on_page_load = function (wrapper) {
     });
 
     page.add_action_item(__("Refresh"), () => load_data(page));
+    page.add_action_item(__("Retry All Failed"), () => retry_all_failed(page));
 
     frappe.breadcrumbs.add("WhatsApp Notifications");
 
@@ -67,6 +68,18 @@ function render_page(page, data) {
     $(page.wrapper).find(".btn-retomar-envio").on("click", function () {
         var envio_name = $(this).data("envio");
         retomar_envio(envio_name, page);
+    });
+
+    // Wire date-rule Run Now buttons
+    $(page.wrapper).find(".btn-run-date-rule").on("click", function () {
+        var rule = $(this).data("rule");
+        run_date_rule_now(rule, page);
+    });
+
+    // Wire Recent Activity retry buttons
+    $(page.wrapper).find(".btn-retry-log").on("click", function () {
+        var log_name = $(this).data("log");
+        retry_message_log(log_name, page);
     });
 
     // Wire matching-docs buttons
@@ -250,6 +263,7 @@ function render_date_event_section(rules) {
                             <th>${__("Sent Today")}</th>
                             <th>${__("Active Hours")}</th>
                             <th>${__("Last Sent")}</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -296,6 +310,12 @@ function render_date_event_row(r, idx) {
         ? `<span style="font-size:11px;">${frappe.datetime.str_to_user(r.last_sent)}</span>`
         : `<span class="text-muted">—</span>`;
 
+    var run_btn = r.enabled
+        ? `<button class="btn btn-xs btn-default btn-run-date-rule" data-rule="${r.name}">
+               ${__("Run Now")}
+           </button>`
+        : "";
+
     return `<tr>
         <td><a href="/app/whatsapp-notification-rule/${r.name}">${r.rule_name || r.name}</a></td>
         <td>${r.document_type || "—"}</td>
@@ -307,6 +327,7 @@ function render_date_event_row(r, idx) {
         <td style="text-align:center;">${sent_today_html}</td>
         <td style="font-size:12px;">${r.active_hours_label || "Anytime"}</td>
         <td>${last_sent_html}</td>
+        <td>${run_btn}</td>
     </tr>`;
 }
 
@@ -371,6 +392,11 @@ function render_recent_activity(logs) {
             ? `<span class="text-danger" title="${log.error_message}" style="font-size:10px;cursor:help;">⚠</span>`
             : "";
 
+        var retry_btn = log.status === "Failed"
+            ? `<button class="btn btn-xs btn-warning btn-retry-log" data-log="${log.name}"
+                       title="${log.error_message || ''}">↺ ${__("Retry")}</button>`
+            : "";
+
         return `<tr>
             <td style="font-size:11px;">${frappe.datetime.str_to_user(log.creation)}</td>
             <td>${rule_link}</td>
@@ -378,6 +404,7 @@ function render_recent_activity(logs) {
             <td>${doc_link}</td>
             <td style="font-size:12px;">${log.recipient_name || log.phone || "—"}</td>
             <td>${status_badge} ${error_html}</td>
+            <td>${retry_btn}</td>
         </tr>`;
     }).join("");
 
@@ -399,6 +426,7 @@ function render_recent_activity(logs) {
                         <th>${__("Document")}</th>
                         <th>${__("Recipient")}</th>
                         <th>${__("Status")}</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -540,4 +568,70 @@ function badge_style(color) {
         gray:   "background:#f5f5f5;color:#757575;",
     };
     return `display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;${colors[color] || colors.gray}`;
+}
+
+// ---------------------------------------------------------------------------
+// Run Now / Retry actions
+// ---------------------------------------------------------------------------
+
+function run_date_rule_now(rule_name, page) {
+    frappe.confirm(
+        __("Run rule <b>{0}</b> now for today's matching documents?<br><br>"
+            + "<label><input type='checkbox' id='force_run'> "
+            + __("Force re-send (ignore already-sent today)")
+            + "</label>", [rule_name]),
+        function () {
+            var force = document.getElementById("force_run") && document.getElementById("force_run").checked ? 1 : 0;
+            frappe.call({
+                method: "whatsapp_notifications.whatsapp_notifications.tasks.run_date_rule_now",
+                args: { rule_name: rule_name, force: force },
+                freeze: true,
+                freeze_message: __("Running rule..."),
+                callback: function (r) {
+                    if (!r.message) return;
+                    var m = r.message;
+                    if (!m.success) {
+                        frappe.msgprint({ title: __("Error"), indicator: "red", message: m.error });
+                        return;
+                    }
+                    var msg = __("Processed: {0} | Skipped: {1}", [m.processed, m.skipped]);
+                    if (m.errors && m.errors.length) {
+                        msg += "<br><span class='text-danger'>" + __("Errors:") + " " + m.errors.join(", ") + "</span>";
+                    }
+                    frappe.msgprint({ title: __("Done"), indicator: m.errors && m.errors.length ? "orange" : "green", message: msg });
+                    load_data(page);
+                }
+            });
+        }
+    );
+}
+
+function retry_message_log(log_name, page) {
+    frappe.call({
+        method: "whatsapp_notifications.whatsapp_notifications.tasks.retry_single_message_log",
+        args: { log_name: log_name },
+        callback: function (r) {
+            if (r.message && r.message.success) {
+                frappe.show_alert({ message: __("Message queued for retry (attempt #{0})", [r.message.retry_count]), indicator: "green" }, 4);
+                setTimeout(() => load_data(page), 1500);
+            } else {
+                frappe.msgprint({ title: __("Error"), indicator: "red", message: (r.message && r.message.error) || __("Retry failed") });
+            }
+        }
+    });
+}
+
+function retry_all_failed(page) {
+    frappe.confirm(
+        __("Retry all Failed messages? This will re-queue them for sending."),
+        function () {
+            frappe.call({
+                method: "whatsapp_notifications.whatsapp_notifications.tasks.trigger_retry_processing",
+                callback: function () {
+                    frappe.show_alert({ message: __("Retry triggered — refresh in a moment to see updated statuses"), indicator: "green" }, 5);
+                    setTimeout(() => load_data(page), 3000);
+                }
+            });
+        }
+    );
 }

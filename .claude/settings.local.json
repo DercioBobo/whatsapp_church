@@ -15,7 +15,8 @@
       "Bash(bench:*)",
       "Read(//c/Users/DBobo/PhpstormProjects/church_portal/**)",
       "Read(//c/Users/DBobo/PhpstormProjects/church_portal//**)",
-      "Bash(grep -E \"\\\\.\\(py|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(py|js\\)$\")",
+      "Bash(xargs grep *)"
     ]
   }
 }
