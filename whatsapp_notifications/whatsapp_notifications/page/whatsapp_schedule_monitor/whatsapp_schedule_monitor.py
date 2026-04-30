@@ -109,6 +109,7 @@ def _birthday_channels(rule):
 # ---------------------------------------------------------------------------
 
 def _get_date_event_rules():
+    """Return one entry per rule (grouped), each with a nested `offsets` list."""
     rules = frappe.get_all(
         "WhatsApp Notification Rule",
         filters={"event": ["in", ["Days Before", "Days After"]]},
@@ -124,44 +125,56 @@ def _get_date_event_rules():
     result = []
 
     for rule in rules:
-        offsets = frappe.get_all(
+        reminder_rows = frappe.get_all(
             "WhatsApp Notification Reminder",
             filters={"parent": rule["name"], "parenttype": "WhatsApp Notification Rule"},
             fields=["days"],
             order_by="days desc"
         )
 
-        if offsets:
+        offset_entries = []
+        if reminder_rows:
             rule["has_reminder_offsets"] = True
-            for offset_row in offsets:
-                days = int(offset_row["days"] or 0)
+            for row in reminder_rows:
+                days = int(row["days"] or 0)
                 if not days:
                     continue
-                entry = dict(rule)
-                entry["active_offset_days"] = days
                 target = _calc_target_date_from_days(rule["event"], today_str, days)
-                entry["target_date"] = str(target) if target else None
                 match_info = _get_date_rule_matches(rule, target)
-                entry["matches_today"] = match_info["count"]
-                entry["matching_docs"] = match_info["docs"]
-                entry["has_more"] = match_info["has_more"]
-                entry["sent_today"] = _count_sent_today_offset(rule["name"], days)
-                entry["last_sent"] = _get_last_sent(rule["name"])
-                entry["active_hours_label"] = _active_hours_label(rule)
-                result.append(entry)
+                sent = _count_sent_today_offset(rule["name"], days)
+                offset_entries.append({
+                    "days": days,
+                    "days_left_label": _days_left_label(rule["event"], days),
+                    "target_date": str(target) if target else None,
+                    "matches_today": match_info["count"],
+                    "sent_today": sent,
+                    "is_done": match_info["count"] > 0 and sent >= match_info["count"],
+                    "matching_docs": match_info["docs"],
+                    "has_more": match_info["has_more"],
+                })
         else:
             rule["has_reminder_offsets"] = False
-            rule["active_offset_days"] = rule.get("days_offset")
+            days = int(rule.get("days_offset") or 0)
             target = _calc_target_date(rule, today_str)
-            rule["target_date"] = str(target) if target else None
             match_info = _get_date_rule_matches(rule, target)
-            rule["matches_today"] = match_info["count"]
-            rule["matching_docs"] = match_info["docs"]
-            rule["has_more"] = match_info["has_more"]
-            rule["sent_today"] = _count_sent_today(rule["name"])
-            rule["last_sent"] = _get_last_sent(rule["name"])
-            rule["active_hours_label"] = _active_hours_label(rule)
-            result.append(rule)
+            sent = _count_sent_today(rule["name"])
+            offset_entries.append({
+                "days": days,
+                "days_left_label": _days_left_label(rule["event"], days),
+                "target_date": str(target) if target else None,
+                "matches_today": match_info["count"],
+                "sent_today": sent,
+                "is_done": match_info["count"] > 0 and sent >= match_info["count"],
+                "matching_docs": match_info["docs"],
+                "has_more": match_info["has_more"],
+            })
+
+        rule["offsets"] = offset_entries
+        rule["total_matches_today"] = sum(o["matches_today"] for o in offset_entries)
+        rule["total_sent_today"] = sum(o["sent_today"] for o in offset_entries)
+        rule["last_sent"] = _get_last_sent(rule["name"])
+        rule["active_hours_label"] = _active_hours_label(rule)
+        result.append(rule)
 
     return result
 
@@ -252,35 +265,54 @@ def _active_hours_label(rule):
     return "Restricted"
 
 
+def _days_left_label(event, days):
+    """Human-readable label for an offset, e.g. 'In 14 days', 'Tomorrow', 'Today'."""
+    if days == 0:
+        return "Today"
+    if event == "Days Before":
+        if days == 1:
+            return "Tomorrow"
+        return "In {} days".format(days)
+    else:  # Days After
+        if days == 1:
+            return "Yesterday"
+        return "{} days ago".format(days)
+
+
 # ---------------------------------------------------------------------------
 # Recent Activity
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
 def get_bulk_sends(limit=20):
-    """Return recent Envio em Massa WhatsApp docs for the monitor page."""
+    """Return recent Envio em Massa WhatsApp docs for the monitor page.
+
+    Always shows non-completed sends; completed sends are only shown if created
+    within the last 48 hours to keep the monitor view clean.
+    """
     try:
-        envios = frappe.get_all(
-            "Envio em Massa WhatsApp",
-            fields=[
-                "name", "aviso", "titulo", "status",
-                "total", "enviados", "falhados", "pendentes",
-                "disparado_por", "iniciado_em", "concluido_em", "ultimo_heartbeat"
-            ],
-            order_by="creation desc",
-            limit_page_length=int(limit)
-        )
-        from frappe.utils import now_datetime
+        from frappe.utils import now_datetime, add_days
+        cutoff = str(add_days(today(), -2))
+        envios = frappe.db.sql("""
+            SELECT name, aviso, titulo, status,
+                   total, enviados, falhados, pendentes,
+                   disparado_por, iniciado_em, concluido_em, ultimo_heartbeat
+            FROM `tabEnvio em Massa WhatsApp`
+            WHERE status != 'Concluído'
+               OR DATE(creation) >= %s
+            ORDER BY creation DESC
+            LIMIT %s
+        """, (cutoff, int(limit)), as_dict=True)
+
         now = str(now_datetime())
         for e in envios:
             done = (e.get("enviados") or 0) + (e.get("falhados") or 0)
             total = e.get("total") or 1
             e["progresso"] = round(done / total * 100)
-            # Detect stalled: Em Execução but heartbeat > 15 min ago
             if e.get("status") == "Em Execução" and e.get("ultimo_heartbeat"):
-                from frappe.utils import get_datetime, time_diff_in_seconds
+                from frappe.utils import time_diff_in_seconds
                 diff = time_diff_in_seconds(now, str(e["ultimo_heartbeat"]))
-                if diff > 900:  # 15 minutes
+                if diff > 900:
                     e["possivelmente_interrompido"] = True
         return envios
     except Exception:

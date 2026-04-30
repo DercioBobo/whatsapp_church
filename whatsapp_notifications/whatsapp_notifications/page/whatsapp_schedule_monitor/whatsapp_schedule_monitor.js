@@ -84,8 +84,8 @@ function render_page(page, data) {
 
     // Wire matching-docs buttons
     $(page.wrapper).find(".show-matches-btn").on("click", function () {
-        var idx = $(this).data("match-idx");
-        var info = (window._whatsapp_monitor_match_docs || {})[idx] || {};
+        var key = $(this).data("match-key");
+        var info = (window._whatsapp_monitor_match_docs || {})[key] || {};
         show_matching_docs_dialog(info.docs || [], info.has_more, info.rule_name, info.doctype);
     });
 
@@ -225,17 +225,19 @@ function run_birthday_now(rule_name, page) {
 
 function render_date_event_section(rules) {
     window._whatsapp_monitor_match_docs = {};
-    var rows = (rules || []).map((r, i) => {
-        window._whatsapp_monitor_match_docs[i] = {
-            docs: r.matching_docs || [],
-            has_more: r.has_more || false,
-            rule_name: r.rule_name || r.name,
-            doctype: r.document_type
-        };
-        return render_date_event_row(r, i);
-    }).join("");
 
-    var unique_rule_count = new Set((rules || []).map(r => r.name)).size;
+    var rows = (rules || []).map(function(r) {
+        (r.offsets || []).forEach(function(o) {
+            var key = r.name + "__" + o.days;
+            window._whatsapp_monitor_match_docs[key] = {
+                docs: o.matching_docs || [],
+                has_more: o.has_more || false,
+                rule_name: r.rule_name || r.name,
+                doctype: r.document_type
+            };
+        });
+        return render_date_event_row(r);
+    }).join("");
 
     return `
     <div class="card" style="${card_style()}">
@@ -244,23 +246,19 @@ function render_date_event_section(rules) {
                 📅 ${__("Days Before / After Rules")}
             </span>
             <span class="badge" style="background:#f0f4f8;color:#6c757d;padding:4px 10px;border-radius:20px;font-size:12px;">
-                ${unique_rule_count} ${__("rules")} · ${rules.length} ${__("offsets")}
+                ${(rules || []).length} ${__("rules")}
             </span>
         </div>
-        ${rules.length === 0
+        ${!rules || rules.length === 0
             ? `<p class="text-muted" style="padding:16px;">${__("No Days Before / After rules configured.")}</p>`
             : `<div style="overflow-x:auto;">
                 <table class="table table-sm" style="${table_style()}">
                     <thead>
                         <tr style="background:#f8f9fa;">
-                            <th>${__("Rule Name")}</th>
+                            <th>${__("Rule")}</th>
                             <th>${__("DocType")}</th>
-                            <th>${__("Event")}</th>
-                            <th>${__("Date Field")}</th>
-                            <th>${__("Target Date")}</th>
                             <th>${__("Status")}</th>
-                            <th>${__("Matches Today")}</th>
-                            <th>${__("Sent Today")}</th>
+                            <th>${__("Timing / Offsets")}</th>
                             <th>${__("Active Hours")}</th>
                             <th>${__("Last Sent")}</th>
                             <th></th>
@@ -273,58 +271,63 @@ function render_date_event_section(rules) {
     </div>`;
 }
 
-function render_date_event_row(r, idx) {
+function render_date_event_row(r) {
     var enabled_badge = r.enabled
         ? `<span style="${badge_style("green")}">${__("Active")}</span>`
         : `<span style="${badge_style("gray")}">${__("Disabled")}</span>`;
 
-    var offset_days = r.active_offset_days || r.days_offset;
-    var event_label = r.event === "Days Before"
-        ? `<span style="color:#e65100;">${offset_days} ${__("day(s) before")}</span>`
-        : `<span style="color:#1565c0;">${offset_days} ${__("day(s) after")}</span>`;
-    if (r.has_reminder_offsets) {
-        event_label += ` <span style="${badge_style("blue")}" title="${__("Part of Reminder Offsets series")}">R</span>`;
-    }
+    var offsets = r.offsets || [];
+    var pending = offsets.filter(o => !o.is_done);
+    var all_done = offsets.length > 0 && pending.length === 0 && offsets.every(o => o.is_done);
 
-    var has_docs = r.matching_docs && r.matching_docs.length > 0;
-    var docs_btn = has_docs
-        ? `<button class="btn btn-xs btn-default show-matches-btn" data-match-idx="${idx}"
-              style="margin-left:4px;padding:0 5px;font-size:11px;" title="${__("View matching documents")}">🔗</button>`
-        : "";
-
-    var matches_html;
-    if (!r.matches_today) {
-        matches_html = `<span class="text-muted">0</span>`;
-    } else if (r.matches_today > 0 && r.sent_today === 0) {
-        matches_html = `<b style="color:#e65100;">${r.matches_today}</b>
-            <span style="${badge_style("orange")}">${__("Pending")}</span>${docs_btn}`;
+    var pills_html;
+    if (all_done) {
+        pills_html = `<span style="${badge_style("green")}">✓ ${__("All sent today")}</span>`;
     } else {
-        matches_html = `<b>${r.matches_today}</b>${docs_btn}`;
-    }
+        pills_html = offsets.map(function(o) {
+            if (o.is_done) return ""; // cleared — already sent
 
-    var sent_today_html = r.sent_today > 0
-        ? `<b style="color:#2e7d32;">${r.sent_today}</b>`
-        : `<span class="text-muted">0</span>`;
+            var pill_color, count_suffix = "", docs_btn = "";
+
+            if (o.matches_today > 0) {
+                var remaining = o.matches_today - (o.sent_today || 0);
+                pill_color = remaining > 0 ? "orange" : "green";
+                count_suffix = ` <b style="font-size:10px;">(${remaining > 0 ? remaining : o.matches_today})</b>`;
+            } else {
+                pill_color = "gray";
+            }
+
+            if (o.matching_docs && o.matching_docs.length > 0) {
+                var key = r.name + "__" + o.days;
+                docs_btn = ` <button class="btn btn-xs show-matches-btn" data-match-key="${key}"
+                    style="padding:0 4px;font-size:10px;line-height:1.5;border:none;background:none;cursor:pointer;"
+                    title="${__("View matching documents")}">🔗</button>`;
+            }
+
+            return `<span style="${badge_style(pill_color)};white-space:nowrap;">${__(o.days_left_label)}${count_suffix}</span>${docs_btn}`;
+        }).filter(Boolean).join(" ");
+
+        if (!pills_html.trim()) {
+            pills_html = `<span class="text-muted" style="font-size:12px;">—</span>`;
+        }
+    }
 
     var last_sent_html = r.last_sent
         ? `<span style="font-size:11px;">${frappe.datetime.str_to_user(r.last_sent)}</span>`
         : `<span class="text-muted">—</span>`;
 
     var run_btn = r.enabled
-        ? `<button class="btn btn-xs btn-default btn-run-date-rule" data-rule="${r.name}">
-               ${__("Run Now")}
+        ? `<button class="btn btn-xs btn-default btn-run-date-rule" data-rule="${r.name}"
+               title="${__("Run this rule now — outside its normal schedule")}">
+               ▶ ${__("Run Now")}
            </button>`
         : "";
 
     return `<tr>
         <td><a href="/app/whatsapp-notification-rule/${r.name}">${r.rule_name || r.name}</a></td>
-        <td>${r.document_type || "—"}</td>
-        <td>${event_label}</td>
-        <td style="font-size:12px;">${r.date_field || "—"}</td>
-        <td style="font-size:12px;"><b>${r.target_date || "—"}</b></td>
+        <td style="font-size:12px;">${r.document_type || "—"}</td>
         <td>${enabled_badge}</td>
-        <td style="text-align:center;">${matches_html}</td>
-        <td style="text-align:center;">${sent_today_html}</td>
+        <td style="max-width:320px;">${pills_html}</td>
         <td style="font-size:12px;">${r.active_hours_label || "Anytime"}</td>
         <td>${last_sent_html}</td>
         <td>${run_btn}</td>
@@ -576,10 +579,16 @@ function badge_style(color) {
 
 function run_date_rule_now(rule_name, page) {
     frappe.confirm(
-        __("Run rule <b>{0}</b> now for today's matching documents?<br><br>"
-            + "<label><input type='checkbox' id='force_run'> "
-            + __("Force re-send (ignore already-sent today)")
-            + "</label>", [rule_name]),
+        `<div>
+            <b>${__("Run \"{0}\" right now?", [rule_name])}</b>
+            <p style="margin-top:8px;font-size:12px;color:#666;">
+                ⚠ ${__("This sends messages immediately for today's matching documents — it runs outside the normal schedule, regardless of when this rule is next due.")}
+            </p>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="force_run">
+                ${__("Force re-send (ignore already-sent today)")}
+            </label>
+        </div>`,
         function () {
             var force = document.getElementById("force_run") && document.getElementById("force_run").checked ? 1 : 0;
             frappe.call({
