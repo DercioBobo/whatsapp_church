@@ -82,6 +82,16 @@ def handle_on_submit(doc, method=None):
     check_approval_event_trigger(doc, "On Submit")
 
 
+def handle_before_cancel(doc, method=None):
+    """Delete linked WhatsApp Message Logs before cancel so the link check doesn't block it"""
+    _delete_linked_message_logs(doc)
+
+
+def handle_before_delete(doc, method=None):
+    """Delete linked WhatsApp Message Logs before delete so the link check doesn't block it"""
+    _delete_linked_message_logs(doc)
+
+
 def handle_on_cancel(doc, method=None):
     """Handle on_cancel event for all DocTypes"""
     process_event(doc, "on_cancel")
@@ -724,6 +734,28 @@ def _create_render_failure_log(recipient, doc, rule, error_hint="Template render
         frappe.db.commit()
     except Exception:
         pass  # Never let log creation hide the original error
+
+
+def _delete_linked_message_logs(doc):
+    """
+    Delete all WhatsApp Message Logs that reference this document.
+    Called before cancel/delete so Frappe's link validation doesn't block the operation.
+    """
+    if doc.doctype in SYSTEM_DOCTYPES or doc.doctype.startswith("__"):
+        return
+
+    try:
+        frappe.db.delete("WhatsApp Message Log", {
+            "reference_doctype": doc.doctype,
+            "reference_name": doc.name
+        })
+    except Exception as e:
+        frappe.log_error(
+            "WhatsApp: failed to delete message logs for {} {}: {}".format(
+                doc.doctype, doc.name, str(e)
+            ),
+            "WhatsApp Cleanup Error"
+        )
 
 
 def get_event_name(event_label):

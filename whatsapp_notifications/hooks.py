@@ -103,6 +103,8 @@ after_migrate = "whatsapp_notifications.whatsapp_notifications.install.after_mig
 
 doc_events = {
     "*": {
+        "before_cancel": "whatsapp_notifications.whatsapp_notifications.events.handle_before_cancel",
+        "before_delete": "whatsapp_notifications.whatsapp_notifications.events.handle_before_delete",
         "after_insert": "whatsapp_notifications.whatsapp_notifications.events.handle_after_insert",
         "on_update": "whatsapp_notifications.whatsapp_notifications.events.handle_on_update",
         "on_change": "whatsapp_notifications.whatsapp_notifications.events.handle_on_change",
