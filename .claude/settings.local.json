@@ -16,7 +16,14 @@
       "Read(//c/Users/DBobo/PhpstormProjects/church_portal/**)",
       "Read(//c/Users/DBobo/PhpstormProjects/church_portal//**)",
       "Bash(grep -E \"\\\\.\\(py|js\\)$\")",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(where python *)",
+      "Bash(where bench *)",
+      "Read(//c/frappe-bench/apps/frappe/frappe/**)",
+      "Read(//c/Users/DBobo/frappe-bench/apps/frappe/frappe/**)",
+      "Bash(pip show *)",
+      "Bash(pip3 show *)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/frappe/frappe/develop/frappe/model/delete_doc.py\")"
     ]
   }
 }

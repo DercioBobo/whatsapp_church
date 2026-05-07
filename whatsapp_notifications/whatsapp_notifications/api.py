@@ -267,6 +267,11 @@ def process_message_log(log_name):
             "apikey": settings.get("api_key")
         }
         
+        # Guard: reject empty messages before hitting the API
+        if not (log.message or "").strip():
+            log.mark_failed("Empty message text — template render likely failed, check WhatsApp Template Error log")
+            return {"success": False, "error": "Empty message", "log": log.name}
+
         # Build payload - escape for JSON (v13 sandbox compatible)
         payload = {
             "number": log.formatted_phone,

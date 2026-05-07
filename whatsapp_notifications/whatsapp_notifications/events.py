@@ -237,7 +237,7 @@ def process_rule(doc, rule, settings):
                 row_before = recipient.get("row_before") if isinstance(recipient, dict) else None
                 message = rule.render_message(doc, row=row, changed_fields=changed_fields, row_before=row_before)
 
-                if message_type == 'Text Only' and not message:
+                if message_type == 'Text Only' and not (message or "").strip():
                     _create_render_failure_log(recipient, doc, rule)
                     continue
 
@@ -257,7 +257,7 @@ def process_rule(doc, rule, settings):
         # Standard path: render message once, send to all recipients
         message = rule.render_message(doc)
 
-        if message_type == 'Text Only' and not message:
+        if message_type == 'Text Only' and not (message or "").strip():
             frappe.log_error(
                 "Empty message for rule {} on {}".format(rule.name, doc.name),
                 "WhatsApp Template Error"
@@ -714,23 +714,26 @@ def _create_render_failure_log(recipient, doc, rule, error_hint="Template render
     This makes the failure visible in the monitor and retryable from the UI.
     """
     try:
-        from whatsapp_notifications.whatsapp_notifications.doctype.whatsapp_message_log.whatsapp_message_log import create_message_log
+        from whatsapp_notifications.whatsapp_notifications.utils import format_phone_number
         phone = recipient.get("value", "") if isinstance(recipient, dict) else str(recipient or "")
         if not phone:
             return
-        log = create_message_log(
-            phone=phone,
-            message="",
-            reference_doctype=doc.doctype,
-            reference_name=doc.name,
-            notification_rule=rule.name,
-            recipient_name=None,
-            formatted_phone=phone,
-        )
-        frappe.db.set_value("WhatsApp Message Log", log.name, {
+        formatted_phone = format_phone_number(phone) or phone
+        # Insert directly as Failed so the scheduler never picks it up as Pending
+        log = frappe.get_doc({
+            "doctype": "WhatsApp Message Log",
+            "phone": phone,
+            "formatted_phone": formatted_phone,
+            "message": "",
+            "reference_doctype": doc.doctype,
+            "reference_name": doc.name,
+            "notification_rule": rule.name,
             "status": "Failed",
-            "error_message": error_hint[:500]
+            "error_message": error_hint[:500],
+            "retry_count": 0,
+            "message_type": "Text",
         })
+        log.insert(ignore_permissions=True)
         frappe.db.commit()
     except Exception:
         pass  # Never let log creation hide the original error
