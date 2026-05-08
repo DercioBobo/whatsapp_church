@@ -267,8 +267,11 @@ def process_message_log(log_name):
             "apikey": settings.get("api_key")
         }
         
-        # Guard: reject empty messages before hitting the API
+        # Guard: reject empty messages before hitting the API.
+        # Also exhaust retry_count so the retry scheduler never re-queues this —
+        # a missing message field can only be fixed by fixing the template.
         if not (log.message or "").strip():
+            log.retry_count = settings.get("max_retries", 3)
             log.mark_failed("Empty message text — template render likely failed, check WhatsApp Template Error log")
             return {"success": False, "error": "Empty message", "log": log.name}
 

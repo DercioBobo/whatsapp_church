@@ -730,7 +730,7 @@ def _create_render_failure_log(recipient, doc, rule, error_hint="Template render
             "notification_rule": rule.name,
             "status": "Failed",
             "error_message": error_hint[:500],
-            "retry_count": 0,
+            "retry_count": 99,  # Never auto-retry — empty message can only be fixed by fixing the template
             "message_type": "Text",
         })
         log.insert(ignore_permissions=True)
